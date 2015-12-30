@@ -1,0 +1,22 @@
+{
+  "name": "contactapp",
+  "version": "1.0.0",
+  "description": "",
+  "main": "app.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/michaelj23/contactApp.git"
+  },
+  "author": "michaelj23",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/michaelj23/contactApp/issues"
+  },
+  "homepage": "https://github.com/michaelj23/contactApp#readme",
+  "dependencies": {
+    "express": "^4.13.3"
+  }
+}
