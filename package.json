@@ -17,6 +17,8 @@
   },
   "homepage": "https://github.com/michaelj23/contactApp#readme",
   "dependencies": {
-    "express": "^4.13.3"
+    "bootstrap": "^3.3.6",
+    "express": "^4.13.3",
+    "jade": "^1.11.0"
   }
 }

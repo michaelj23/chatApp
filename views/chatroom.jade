@@ -1,0 +1,22 @@
+extends ./header.jade
+
+block title
+	title Chatroom
+
+block content
+	.container(style='height:100%')
+		.row
+			.col-xs-10(style='padding:0px')
+				h2 Chatroom with ...
+			.col-xs-2(style='padding:0px')
+				button(type='button' class='btn btn-danger' style='margin-top:20px;margin-bottom:10px;float:right') Leave room
+
+		.row(class='panel' style='height:75%;border:2px solid black')
+			.panel-body 
+			
+		.row(style='height:10%')
+			.col-xs-11(type='text' class='panel' style='height:100%;border:2px solid black;padding:0px')
+				input.form-control(type='text' style='height:100%;font-size:20px')
+			button.col-xs-1(type='button' class='btn btn-success' style='height:100%;font-size:20px') Send
+
+				//input.panel-body(style='font-size:20px')
