@@ -19,16 +19,16 @@ var db = mongoose.connection;
 db.on('error', console.error.bind(console, 'connection error'));
 db.once('open', function() {
 	console.log('database connected');
-	var Schema = mongoose.Schema;
-	var userSchema = new Schema({
-		firstname: String,
-		lastname: String,
-		username: String,
-		password: String,
-		email: String
-	});
-	var User = mongoose.model('User', userSchema);
 });
+var Schema = mongoose.Schema;
+var userSchema = new Schema({
+	firstname: String,
+	lastname: String,
+	username: String,
+	password: String,
+	email: String
+});
+var User = mongoose.model('User', userSchema);
 
 
 io.on('connection', function(socket) {
@@ -49,15 +49,41 @@ app.route('/signup')
 	})
 	.post(function(req, res, next) {
 		var account_info = req.body;
+		// check for blank fields
 		for (var key in account_info) {
 			if (account_info.hasOwnProperty(key)) {
 				if (account_info[key] == '') {
 					res.render('signup', {error: 'One or more fields were left blank.'});
-					return; //NEED this return
-				}
+					return; //need this return
+				} 
 			}
 		}
-		res.redirect('/contactdir');
+		// check whether username is taken
+		User.findOne({username: account_info.username}, function(err, user) {
+			if (err) {
+				next(err);
+			} else if (user) {
+				// found one
+				res.render('signup', {error: 'This username is already taken.'});
+				return;
+			} else {
+				// if no user found, create a new user
+				User.create({
+					firstname: account_info.firstname,
+					lastname: account_info.lastname,
+					username: account_info.username,
+					password: account_info.password,
+					email: account_info.email
+				}, function(err, user) {
+					if (err) {
+						next(err);
+					} else {
+						res.redirect('/contactdir');
+						return;
+					}
+				});
+			}
+		});
 	});
 
 
