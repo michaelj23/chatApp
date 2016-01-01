@@ -1,0 +1,27 @@
+extends ./header.jade
+
+block title
+	title Create an account
+
+block content
+	.container
+		h1 Create a Contact Account
+		if error
+			.alert(class='alert-danger' role='alert') #{error}
+		form(action='/signup' method='post')
+			.form-group
+				label(for='firstname') First name
+				input.form-control#firstname(name='firstname')
+			.form-group
+				label(for='lastname') Last name
+				input.form-control#lastname(name='lastname')
+			.form-group
+				label(for='username') Username
+				input.form-control#username(name='username')
+			.form-group
+				label(for='password') Password
+				input.form-control#password(name='password' type='password')
+			.form-group
+				label(for='email') Email
+				input.form-control#email(name='email' type='email')
+			button(type='submit' class='btn btn-success') Create my account

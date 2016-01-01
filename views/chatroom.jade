@@ -12,11 +12,21 @@ block content
 				button(type='button' class='btn btn-danger' style='margin-top:20px;margin-bottom:10px;float:right') Leave room
 
 		.row(class='panel' style='height:75%;border:2px solid black')
-			.panel-body 
-			
+			ul.panel-body#messages(class='list-unstyled' style='font-size:20px') 
+
 		.row(style='height:10%')
 			.col-xs-11(type='text' class='panel' style='height:100%;border:2px solid black;padding:0px')
-				input.form-control(type='text' style='height:100%;font-size:20px')
-			button.col-xs-1(type='button' class='btn btn-success' style='height:100%;font-size:20px') Send
+				input.form-control(type='text' id='message' style='height:100%;font-size:20px' placeholder='Type a chat message here')
+			button.col-xs-1(type='button' class='btn btn-success' id='send' style='height:100%;font-size:20px') Send
+	script(src='/socket.io/socket.io.js')
+	script.
+		var socket = io();
+		$('#send').click(function() {
+			socket.emit('message', $('#message').val());
+			$('#message').val('');
+		});
+		//TODO: scrolling
+		socket.on('message', function(message) {
+			$("#messages").append('<li>' + message + '</li>');
+		});
 
-				//input.panel-body(style='font-size:20px')
