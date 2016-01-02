@@ -30,12 +30,23 @@ db.once('open', function() {
 	console.log('database connected');
 });
 var Schema = mongoose.Schema;
+var ObjectId = Schema.ObjectId;
+var chatroomSchema = new Schema({
+	name: String,
+	members: [ObjectId],
+	messageLog: [String],
+	capacity: Number,
+	isPublic: Boolean,
+	needPermission: Boolean
+});
+var Chatroom = mongoose.model('Chatroom', chatroomSchema);
 var userSchema = new Schema({
 	firstname: String,
 	lastname: String,
 	username: String,
 	password: String,
-	email: String
+	email: String,
+	chatrooms: [chatroomSchema]
 });
 var User = mongoose.model('User', userSchema);
 
@@ -111,8 +122,10 @@ app.route('/signup')
 	.get(function(req, res, next) {
 		if (req.session.user) {
 			//TODO: render chatroom dir
+			res.redirect('/contactdir');
+		} else {
+			res.render('signup');
 		}
-		res.render('signup');
 	})
 	.post(function(req, res, next) {
 		var account_info = req.body;
@@ -164,7 +177,37 @@ app.get('/chatroom', authenticate, function(req, res, next) {
 	res.render('chatroom');
 });
 app.get('/contactdir', authenticate, function(req, res, next) {
-	res.render('contactdir', {user: req.session.user.username});
+	Chatroom.find({isPublic: true}, function(err, rooms) {
+		if (err) {
+			next(err);
+		} else {
+			var memberRooms = {};
+			var otherRooms = [];
+			var memberOfChatrooms = req.session.user.chatrooms;
+			if (rooms) {
+				// eliminate duplicates between all public rooms and rooms that this user
+				// is a member of
+				for (var i = 0; i < memberOfChatrooms.length; i += 1) {
+					memberRooms[memberOfChatrooms.id] = true;
+				}
+				for (i = 0; i < rooms.length; i += 1) {
+					if (!(rooms[i].id in memberRooms)) {
+						otherRooms.push(rooms[i]);
+					}
+				}
+			}
+
+			res.render('contactdir', {
+				user: req.session.user.username,
+				memberOf: memberOfChatrooms,
+				publicRooms: otherRooms
+			});
+			return;
+		}
+	});
+});
+app.get('/newroom', authenticate, function(req, res, next) {
+	res.render('newroom');
 });
 
 

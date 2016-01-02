@@ -1,0 +1,28 @@
+extends ./header.jade
+
+block title
+	title Create a new chatroom
+
+block content
+	.container
+		h1 Create a New Chatroom
+		if error
+			.alert(class='alert-danger' role='alert') #{error}
+		//form(action='/signup' method='post')
+		form
+			.form-group
+				label(for='chatroomname') Chatroom name
+				input.form-control#chatroomname(name='chatroomname')
+			.form-group
+				label(for='capacity') Max Capacity
+				input.form-control#capacity(name='capacity')
+			.form-group
+				label(for='privacy') Public or private?
+				input.form-control#privacy(name='privacy')
+			.form-group
+				label(for='permission') Users need a chatroom member's permission to join?
+				input.form-control#permission(name='permission')
+			.form-group
+				label(for='members') Enter a username to invite a user to this room
+				input.form-control#members(name='members')
+			button(type='submit' class='btn btn-success') Create chatroom
