@@ -2,6 +2,7 @@ var express = require('express');
 var http = require('http');
 var path = require('path');
 var bodyParser = require('body-parser');
+var session = require('client-sessions');
 var app = express();
 var server = http.createServer(app);
 var io = require('socket.io')(server);
@@ -12,6 +13,14 @@ app.set('view engine', 'jade');
 app.use(express.static(path.join(__dirname, 'public')));
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({extended: true}));
+app.use(session({
+	cookieName: 'session',
+	secret: 'kajs2fxZXCveEea35fkGqqqqOApsDkf',
+	duration: 30 * 60 * 1000,
+	activeDuration: 5 * 60 * 1000,
+	httpOnly: true,
+	ephemeral: true
+}));
 
 var mongoose = require('mongoose');
 mongoose.connect('mongodb://localhost/test');
@@ -38,13 +47,71 @@ io.on('connection', function(socket) {
 	});
 });
 
+// make sure session user is valid
+app.use(function(req, res, next) {
+	if (req.session.user) {
+		User.findOne({username: req.session.user.username}, function(err, user) {
+			if (user) {
+				delete req.session.user.password;
+				req.session.user = user;
+			} else {
+				//invalid session user
+				req.session.reset();
+			}
+			next();
+		});
+	} else {
+		next();
+	}
+});
+
+// make sure pages that need login are not accessed by unauthenticated users
+function authenticate(req, res, next) {
+	if (!req.session.user) {
+		res.redirect('/');
+		return;
+	} else {
+		next();
+	}
+}
+
+
 
 // TODO: move routes to router modules
 app.get('/', function(req, res, next) {
-	res.render('index');
+	if (req.session.user) {
+		res.redirect('/contactdir');
+		return;
+	} else {
+		res.render('index');
+	}
+});
+app.get('/login', function(req, res, next) {
+	var login_info = req.query;
+	User.findOne({username: login_info.username}, function(err, user) {
+		if (err) {
+			next(err);
+		} else if (!user || login_info.password != user.password) {
+			delete req.query.password;
+			res.render('index', {error: 'Username or password is incorrect.'});
+			return;
+		} else {
+			req.session.user = user;
+			delete req.session.user.password;
+			res.redirect('/contactdir');
+			return;
+		}
+	});
+});
+app.get('/logout', function(req, res, next) {
+	req.session.reset();
+	res.redirect('/');
 });
 app.route('/signup')
 	.get(function(req, res, next) {
+		if (req.session.user) {
+			//TODO: render chatroom dir
+		}
 		res.render('signup');
 	})
 	.post(function(req, res, next) {
@@ -78,6 +145,8 @@ app.route('/signup')
 					if (err) {
 						next(err);
 					} else {
+						req.session.user = user;
+						delete req.session.user.password;
 						res.redirect('/contactdir');
 						return;
 					}
@@ -91,11 +160,11 @@ app.route('/signup')
 // TODO: private chat room feature
 // TODO: chat log feature; only store 50 or so messages in the browser DOM for performance
 // TODO: new joiner of chat room can load previous messages
-app.get('/chatroom', function(req, res, next) {
+app.get('/chatroom', authenticate, function(req, res, next) {
 	res.render('chatroom');
 });
-app.get('/contactdir', function(req, res, next) {
-	res.render('contactdir');
+app.get('/contactdir', authenticate, function(req, res, next) {
+	res.render('contactdir', {user: req.session.user.username});
 });
 
 

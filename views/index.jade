@@ -7,9 +7,22 @@ block content
 	div.jumbotron
 		div.container(style='text-align:center')
 			h1 Welcome to Contact
-			div.container(style='width:400px;margin-top:20px')
-				a(role='button' class='btn btn-primary btn-lg btn-block' href='/chatroom') Login
-				br
-				a(role='button' class='btn btn-primary btn-lg btn-block' href='/signup') Create an account
+			h3 Log in below
+			if error
+				.alert(class='alert-danger' role='alert') #{error}
+			.container(style='width:600px;margin-top:20px')
+				form.form-horizontal(action='/login', method='get')
+					.form-group
+						label(for='username' class='col-xs-2 control-label') Username
+						.col-xs-10
+							input.form-control#username(name='username') 
+					.form-group
+						label(for='password' class='col-xs-2 control-label') Password
+						.col-xs-10
+							input.form-control#password(type='password', name='password')
+					br
+					.form-group
+						button(class='btn btn-primary btn-lg col-xs-offset-3 col-xs-6' type='submit') Log in
+				a(href='/signup') Don't have an account? Sign up here
 
 
