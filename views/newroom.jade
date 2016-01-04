@@ -11,7 +11,8 @@ block content
 			.col-xs-10(style='padding:0px')
 				h1 Create a New Chatroom
 			.col-xs-2(style='padding:0px')
-				a(role='button' class='btn btn-danger' style='margin-top:20px;margin-bottom:10px;margin-left:5px;float:right' href='/logout') Log out
+				form(action='/logout' method='post')
+					button(type='submit' class='btn btn-danger' style='margin-top:20px;margin-bottom:10px;margin-left:5px;float:right') Log out
 		.row
 			form(action='/newroom' method='post')
 				.form-group
@@ -19,7 +20,12 @@ block content
 					input.form-control#chatroomname(name='chatroomname' value='Chatroom')
 				.form-group
 					label(for='capacity') Capacity (maximum #{maxCapac})
-					input.form-control#capacity(name='capacity' value='2')
+					select.form-control#capacity(name='capacity')
+						- for (var i = 0; i <= maxCapac; i++)
+							if i == 2
+								option(selected) #{i}
+							else
+								option #{i}						
 				.form-group
 					label(for='privacy') Public or private?
 					select.form-control#privacy(name='privacy')

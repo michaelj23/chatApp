@@ -11,7 +11,7 @@ block content
 			if error
 				.alert(class='alert-danger' role='alert') #{error}
 			.container(style='width:600px;margin-top:20px')
-				form.form-horizontal(action='/login', method='get')
+				form.form-horizontal(action='/login', method='post')
 					.form-group
 						label(for='username' class='col-xs-2 control-label') Username
 						.col-xs-10
