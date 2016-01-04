@@ -169,13 +169,14 @@ app.route('/signup')
 	});
 
 
-// TODO: chat room directory page
 // TODO: private chat room feature
 // TODO: chat log feature; only store 50 or so messages in the browser DOM for performance
 // TODO: new joiner of chat room can load previous messages
+// TODO: create groups of users/friends?
 app.get('/chatroom', authenticate, function(req, res, next) {
 	res.render('chatroom');
 });
+// chatroom directory page
 app.get('/contactdir', authenticate, function(req, res, next) {
 	Chatroom.find({isPublic: true}, function(err, rooms) {
 		if (err) {
@@ -206,11 +207,76 @@ app.get('/contactdir', authenticate, function(req, res, next) {
 		}
 	});
 });
-app.get('/newroom', authenticate, function(req, res, next) {
-	res.render('newroom');
-});
+// creating a new chatroom
+app.route('/newroom')
+	.get(authenticate, function(req, res, next) {
+		res.render('newroom');
+	})
+	.post(authenticate, function(req, res, next) {
+		var chatroom_info = req.body;
+		// create chatroom document from form POST data
+		Chatroom.create({
+			name: chatroom_info.chatroomname,
+			members: [],
+			messageLog: [],
+			capacity: Number(chatroom_info.capacity),
+			isPublic: (chatroom_info.privacy == 'Public') ? true : false,
+			needPermission: (chatroom_info.permission == 'Yes') ? true : false 
+		}, function(err, chatroom) {
+			if (err) {
+				next(err);
+			} else {
+				// find all members via regex, remembering to include the logged-in user
+				chatroom_info.members.push(req.session.user.username);
+				var regex = new RegExp('^' + chatroom_info.members.join('$|^') + '$');
+				User.find({username: regex}, function(err, users) {
+					if (err) {
+						next(err);
+					} else {
+						// TODO: users only become members of a chatroom once they accept
+						// the invitation
 
-
+						// update chatroom doc's members attribute with users' ids
+						chatroom.members = users.map(function(user) {
+							return user.id;
+						});
+						chatroom.save(function(err, chatroom) {
+							if (err) {
+								next(err);
+							} else {
+								// add chatroom doc to each member's list of chatrooms
+								users.forEach(function(user) {
+									user.chatrooms.push(chatroom);
+									user.save(function(err) {
+										if (err) {
+											next(err);
+										}
+									});
+								});
+								res.redirect('/chatroom');
+								return;
+							}
+						});
+					}
+				});
+			}
+		});
+	});
+// autocomplete feature via jQuery UI: autocomplete users' usernames
+// when choosing users to invite on creation page for chatroom
+app.get('/autocomplete', function(req, res, next) {
+	var regex = new RegExp('^' + req.query.term, 'i');
+	User.find({username: regex}, function(err, users) {
+		if (err) {
+			next(err);
+		} else {
+			res.send(users.map(function(user) {
+				return user.username;
+			}));
+			return;
+		}
+	})
+})
 
 app.use(function(req, res, next) {
 	var err = new Error('Not Found');

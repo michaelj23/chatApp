@@ -4,25 +4,69 @@ block title
 	title Create a new chatroom
 
 block content
+	// largest room capacity
+	- var maxCapac = 30;
 	.container
-		h1 Create a New Chatroom
-		if error
-			.alert(class='alert-danger' role='alert') #{error}
-		//form(action='/signup' method='post')
-		form
-			.form-group
-				label(for='chatroomname') Chatroom name
-				input.form-control#chatroomname(name='chatroomname')
-			.form-group
-				label(for='capacity') Max Capacity
-				input.form-control#capacity(name='capacity')
-			.form-group
-				label(for='privacy') Public or private?
-				input.form-control#privacy(name='privacy')
-			.form-group
-				label(for='permission') Users need a chatroom member's permission to join?
-				input.form-control#permission(name='permission')
-			.form-group
-				label(for='members') Enter a username to invite a user to this room
-				input.form-control#members(name='members')
-			button(type='submit' class='btn btn-success') Create chatroom
+		.row
+			.col-xs-10(style='padding:0px')
+				h1 Create a New Chatroom
+			.col-xs-2(style='padding:0px')
+				a(role='button' class='btn btn-danger' style='margin-top:20px;margin-bottom:10px;margin-left:5px;float:right' href='/logout') Log out
+		.row
+			form(action='/newroom' method='post')
+				.form-group
+					label(for='chatroomname') Chatroom name
+					input.form-control#chatroomname(name='chatroomname' value='Chatroom')
+				.form-group
+					label(for='capacity') Capacity (maximum #{maxCapac})
+					input.form-control#capacity(name='capacity' value='2')
+				.form-group
+					label(for='privacy') Public or private?
+					select.form-control#privacy(name='privacy')
+						option Public
+						option(selected) Private
+				.form-group
+					label(for='permission') Users need a chatroom member's permission to join?
+					select.form-control#permission(name='permission')
+						option(selected) Yes
+						option No
+				.form-group
+					label(for='nummembers') Number of users to invite to room
+					select.form-control#nummembers(name='nummembers')
+						- for (var i = 0; i <= maxCapac; i++)
+							if i == 1
+								option(selected) #{i}
+							else
+								option #{i}
+				.form-group#members
+					label(for='members') Enter usernames to invite other users to this room. Duplicates and invalid usernames will be ignored!
+					input.form-control(name='members' style='margin-bottom:5px' placeholder='Enter username...')
+				button(type='submit' class='btn btn-success') Create chatroom
+
+
+		link(rel='stylesheet' href='css/jquery-ui.min.css')
+		script(src='javascript/jquery-ui.min.js')
+		script.
+			var options = {
+				source: '/autocomplete'
+			}
+			$('[name=members]').autocomplete(options);
+			// toggle number of users to invite (called members of this chatroom)
+			var numMemberInputs = 1;
+			$('#nummembers').change(function() {
+				var selected = Number($(this).val());
+				var members = $('#members');
+				if (selected > numMemberInputs) {
+					while (numMemberInputs < selected) {
+						var newInp = $('<input class="form-control" name="members" style="margin-bottom:5px" placeholder="Enter username...">');
+						members.append(newInp);
+						newInp.autocomplete(options);
+						numMemberInputs += 1;
+					}
+				} else {
+					while (numMemberInputs > selected) {
+						$('[name=members]').last().remove();
+						numMemberInputs -= 1;
+					}
+				}
+			});
