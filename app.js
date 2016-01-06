@@ -55,29 +55,49 @@ var User = mongoose.model('User', userSchema);
 
 
 io.on('connection', function(socket) {
+	socket.on('join chatroom', function(roomData) {
+		socket.room = roomData.chatroomId;
+		socket.username = roomData.username;
+		socket.join(roomData.chatroomId);
+		io.to(roomData.chatroomId).emit('announcement', roomData.username + ' connected');
+	});
+	socket.on('disconnect', function() {
+		io.to(socket.room).emit('announcement', socket.username + ' disconnected');
+	});
 	socket.on('message', function(message) {
-		//TODO: emit message to only people in the chat room from which you got the message
-		io.emit('message', message);
+		if (socket.room) { // user must have officially joined the chatroom
+			var d = new Date();
+			var hour = d.getHours();
+			var minutes = d.getMinutes();
+			if (minutes < 10) minutes = '0' + minutes;
+			var label = (hour > 11) ? 'PM' : 'AM';
+			if (hour % 12 == 0) hour = 12;
+			else hour = hour % 12;
+			var timestamp = hour + ':' + minutes + ' ' + label;
+			message.timestamp = timestamp;
+
+			io.to(socket.room).emit('message', message);
+		}
 	});
 });
 
 // make sure session user is valid
-// app.use(function(req, res, next) {
-// 	if (req.session.user) {
-// 		User.findOne({username: req.session.user.username}, function(err, user) {
-// 			if (user) {
-// 				delete req.session.user.password;
-// 				req.session.user = user;
-// 			} else {
-// 				//invalid session user
-// 				req.session.reset();
-// 			}
-// 			next();
-// 		});
-// 	} else {
-// 		next();
-// 	}
-// });
+app.use(function(req, res, next) {
+	if (req.session.user) {
+		User.findOne({username: req.session.user.username}, function(err, user) {
+			if (user) {
+				delete req.session.user.password;
+				req.session.user = user;
+			} else {
+				//invalid session user
+				req.session.reset();
+			}
+			next();
+		});
+	} else {
+		next();
+	}
+});
 
 // make sure pages that need login are not accessed by unauthenticated users
 function authenticate(req, res, next) {
@@ -117,10 +137,6 @@ app.post('/login', function(req, res, next) {
 		}
 	});
 });
-// app.get('/logout', function(req, res, next) {
-// 	req.session.reset();
-// 	res.redirect('/');
-// })
 app.post('/logout', function(req, res, next) {
 	req.session.reset();
 	res.redirect('/');
@@ -128,7 +144,6 @@ app.post('/logout', function(req, res, next) {
 app.route('/signup')
 	.get(function(req, res, next) {
 		if (req.session.user) {
-			//TODO: render chatroom dir
 			res.redirect('/contactdir');
 		} else {
 			res.render('signup');
@@ -190,6 +205,8 @@ app.get('/chatroom', function(req, res, next) {
 		} else {
 			res.render('chatroom', {
 				name: chatroom.name,
+				id: chatroom._id,
+				user: req.session.user.username,
 				members: chatroom.members,
 				curMessages: chatroom.messageLog[chatroom.messageLog.length - 1].messages
 			});

@@ -6,14 +6,15 @@ block title
 block content
 	.container(style='height:100%')
 		.row
-			.col-xs-10(style='padding:0px')
+			.col-xs-9(style='padding:0px')
 				h2 #{name} with ...
-			.col-xs-2(style='padding:0px')
+			.col-xs-3(style='padding:0px')
 				button(type='button' class='btn btn-danger' style='margin-top:20px;margin-bottom:10px;margin-left:5px;float:right') Leave room
 				form(action='/logout' method='post')
 					button(type='submit' class='btn btn-danger' style='margin-top:20px;margin-bottom:10px;margin-left:5px;float:right') Log out
+				a(role='button' class='btn btn-danger' style='margin-top:20px;margin-bottom:10px;margin-left:5px;float:right' href='/contactdir')  Go back
 
-		.row(class='panel' style='height:75%;border:2px solid black')
+		.row(class='panel' style='height:75%;border:2px solid black;overflow:auto')
 			ul.panel-body#messages(class='list-unstyled' style='font-size:20px') 
 
 		.row(style='height:10%')
@@ -23,12 +24,37 @@ block content
 	script(src='/socket.io/socket.io.js')
 	script.
 		var socket = io();
-		$('#send').click(function() {
-			socket.emit('message', $('#message').val());
-			$('#message').val('');
+		var curTime = '';
+		socket.emit('join chatroom', {
+			chatroomId:'#{id}',
+			username: '#{user}'
 		});
-		//TODO: scrolling
+		function sendMessage() {
+			// prevent html injection
+			var txt = $('#message').val().replace(/</g, '&lt;').replace(/>/g, '&gt;');
+			socket.emit('message', {
+				text: txt,
+				username: '#{user}',
+			});
+			$('#message').val('');		
+		}
+		$('#send').click(sendMessage);
+		$('#message').keypress(function() {
+			if (event.which == 13) sendMessage();
+		});
+		socket.on('announcement', function(announcement) {
+			$('#messages').append('<li style="color: grey">' + announcement + '</li>');
+		});
 		socket.on('message', function(message) {
-			$("#messages").append('<li>' + message + '</li>');
+			var color;
+			if (message.username == '#{user}') {
+				color = 'red';
+			} else {
+				color = 'blue';
+			}
+			if (message.timestamp == curTime) message.timestamp = '';
+			else curTime = message.timestamp;
+			$('#messages').append('<li><span style="color: ' + color + '">' + message.username + '</span>: ' + message.text + '<span style="float:right">' 
+			+ message.timestamp + '</span></li>');
 		});
 
