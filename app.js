@@ -30,9 +30,15 @@ db.once('open', function() {
 	console.log('database connected');
 });
 var Schema = mongoose.Schema;
-// var ObjectId = Schema.ObjectId;
+// A chatroom's message log is composed of pages, which are arrays of messages.
+// Each page has a certain capacity of messages designating the maximum capacity of 
+// messages the browser will hold.
 var pageSchema = new Schema({
-	messages: [String]
+	messages: [{
+		text: String,
+		username: String,
+		timestamp: String
+	}]
 });
 var chatroomSchema = new Schema({
 	name: String,
@@ -53,6 +59,17 @@ var userSchema = new Schema({
 });
 var User = mongoose.model('User', userSchema);
 
+function createTimestamp() {
+	var d = new Date();
+	var hour = d.getHours();
+	var minutes = d.getMinutes();
+	if (minutes < 10) minutes = '0' + minutes;
+	var label = (hour > 11) ? 'PM' : 'AM';
+	if (hour % 12 == 0) hour = 12;
+	else hour = hour % 12;
+	return hour + ':' + minutes + ' ' + label;
+}
+
 
 io.on('connection', function(socket) {
 	socket.on('join chatroom', function(roomData) {
@@ -66,15 +83,7 @@ io.on('connection', function(socket) {
 	});
 	socket.on('message', function(message) {
 		if (socket.room) { // user must have officially joined the chatroom
-			var d = new Date();
-			var hour = d.getHours();
-			var minutes = d.getMinutes();
-			if (minutes < 10) minutes = '0' + minutes;
-			var label = (hour > 11) ? 'PM' : 'AM';
-			if (hour % 12 == 0) hour = 12;
-			else hour = hour % 12;
-			var timestamp = hour + ':' + minutes + ' ' + label;
-			message.timestamp = timestamp;
+			message.timestamp = createTimestamp();
 
 			io.to(socket.room).emit('message', message);
 		}
@@ -121,12 +130,11 @@ app.get('/', function(req, res, next) {
 	}
 });
 app.post('/login', function(req, res, next) {
-	var login_info = req.body;
-	User.findOne({username: login_info.username}, function(err, user) {
+	var loginInfo = req.body;
+	User.findOne({username: loginInfo.username}, function(err, user) {
 		if (err) {
 			next(err);
-		} else if (!user || login_info.password != user.password) {
-			// TODO: put query parameters in body and away from url
+		} else if (!user || loginInfo.password != user.password) {
 			res.render('index', {error: 'Username or password is incorrect.'});
 			return;
 		} else {
@@ -150,18 +158,18 @@ app.route('/signup')
 		}
 	})
 	.post(function(req, res, next) {
-		var account_info = req.body;
+		var accountInfo = req.body;
 		// check for blank fields
-		for (var key in account_info) {
-			if (account_info.hasOwnProperty(key)) {
-				if (account_info[key] == '') {
+		for (var key in accountInfo) {
+			if (accountInfo.hasOwnProperty(key)) {
+				if (accountInfo[key] == '') {
 					res.render('signup', {error: 'One or more fields were left blank.'});
 					return; //need this return
 				} 
 			}
 		}
 		// check whether username is taken
-		User.findOne({username: account_info.username}, function(err, user) {
+		User.findOne({username: accountInfo.username}, function(err, user) {
 			if (err) {
 				next(err);
 			} else if (user) {
@@ -171,11 +179,11 @@ app.route('/signup')
 			} else {
 				// if no user found, create a new user
 				User.create({
-					firstname: account_info.firstname,
-					lastname: account_info.lastname,
-					username: account_info.username,
-					password: account_info.password,
-					email: account_info.email
+					firstname: accountInfo.firstname,
+					lastname: accountInfo.lastname,
+					username: accountInfo.username,
+					password: accountInfo.password,
+					email: accountInfo.email
 				}, function(err, user) {
 					if (err) {
 						next(err);
@@ -191,28 +199,69 @@ app.route('/signup')
 	});
 
 
-// TODO: private chat room feature
 // TODO: chat log feature; only store 50 or so messages in the browser DOM for performance
 // TODO: new joiner of chat room can load previous messages
 // TODO: create groups of users/friends?
-app.get('/chatroom', function(req, res, next) {	
-	Chatroom.findById(req.query.id, function(err, chatroom) {
-		if (err || !chatroom) {
-			next(err);
-		} else if (chatroom.members.indexOf(req.session.user.username) == -1) {
-			res.redirect('/contactdir');
-			return;
-		} else {
-			res.render('chatroom', {
-				name: chatroom.name,
-				id: chatroom._id,
-				user: req.session.user.username,
-				members: chatroom.members,
-				curMessages: chatroom.messageLog[chatroom.messageLog.length - 1].messages
-			});
-		}
+// TODO: remove chat room
+app.route('/chatroom')
+	.get('/chatroom', authenticate, function(req, res, next) {	
+		Chatroom.findById(req.query.id, function(err, chatroom) {
+			if (err || !chatroom) {
+				next(err);
+			} else if (chatroom.members.indexOf(req.session.user.username) == -1) {
+				res.redirect('/contactdir');
+				return;
+			} else {
+				var curmsg;
+				if (chatroom.messageLog.length > 0) {
+					curmsg = chatroom.messageLog[chatroom.messageLog.length - 1].messages;
+				} else {
+					curmsg = [];
+				}
+				res.render('chatroom', {
+					name: chatroom.name,
+					id: chatroom._id,
+					user: req.session.user.username,
+					members: chatroom.members,
+					curMessages: curmsg,
+					numMessages: curmsg.length
+				});
+			}
+		});
+	})
+	// save an emitted message
+	.post('/chatroom', authenticate, function(req, res, next) {
+		var newMessage = req.body;
+		Chatroom.findById(newMessage.id, function(err, chatroom) {
+			if (err || !chatroom) {
+				next(err);
+			} else if (chatroom.members.indexOf(req.session.user.username) == -1
+				|| req.session.user.username != newMessage.user) {
+				// make sure request's user is in the chatroom and sent the msg
+				res.redirect('/contactdir');
+				return;
+			} else {
+				if (newMessage.newPage == 'true' || chatroom.messageLog.length == 0) {
+					// need new page
+					chatroom.messageLog.push({
+						messages: []
+					});
+				}
+				var curPage = chatroom.messageLog[chatroom.messageLog.length - 1];
+				curPage.messages.push({
+					text: newMessage.text,
+					username: newMessage.user,
+					timestamp: createTimestamp(),
+				});
+				chatroom.save(function(err) {
+					if (err) {
+						next(err);
+					}
+				});
+				res.end();
+			}
+		});
 	});
-});
 // chatroom directory page
 app.get('/contactdir', authenticate, function(req, res, next) {
 	Chatroom.find({isPublic: true}, function(err, rooms) {
@@ -250,25 +299,25 @@ app.route('/newroom')
 		res.render('newroom');
 	})
 	.post(authenticate, function(req, res, next) {
-		var chatroom_info = req.body;
-		if (chatroom_info.members && typeof chatroom_info.members == 'string') {
-			chatroom_info.members = [chatroom_info.members];
+		var chatroomInfo = req.body;
+		if (chatroomInfo.members && typeof chatroomInfo.members == 'string') {
+			chatroomInfo.members = [chatroomInfo.members];
 		}
 		// create chatroom document from form POST data
 		Chatroom.create({
-			name: chatroom_info.chatroomname,
+			name: chatroomInfo.chatroomname,
 			members: [],
-			messageLog: [{messages: []}],
-			capacity: Number(chatroom_info.capacity),
-			isPublic: (chatroom_info.privacy == 'Public') ? true : false,
-			needPermission: (chatroom_info.permission == 'Yes') ? true : false 
+			messageLog: [],
+			capacity: Number(chatroomInfo.capacity),
+			isPublic: (chatroomInfo.privacy == 'Public') ? true : false,
+			needPermission: (chatroomInfo.permission == 'Yes') ? true : false 
 		}, function(err, chatroom) {
 			if (err) {
 				next(err);
 			} else {
 				// find all members via regex, remembering to include the logged-in user
-				chatroom_info.members.push(req.session.user.username);
-				var regex = new RegExp('^' + chatroom_info.members.join('$|^') + '$');
+				chatroomInfo.members.push(req.session.user.username);
+				var regex = new RegExp('^' + chatroomInfo.members.join('$|^') + '$');
 				User.find({username: regex}, function(err, users) {
 					if (err) {
 						next(err);

@@ -5,7 +5,8 @@ block title
 
 block content
 	// largest room capacity
-	- var maxCapac = 30;
+	// TODO: user should not be able to invite more users than capacity
+	- var MAX_CAPAC = 30;
 	.container
 		.row
 			.col-xs-10(style='padding:0px')
@@ -19,9 +20,9 @@ block content
 					label(for='chatroomname') Chatroom name
 					input.form-control#chatroomname(name='chatroomname' value='Chatroom')
 				.form-group
-					label(for='capacity') Capacity (maximum #{maxCapac})
+					label(for='capacity') Capacity (maximum #{MAX_CAPAC})
 					select.form-control#capacity(name='capacity')
-						- for (var i = 0; i <= maxCapac; i++)
+						- for (var i = 0; i <= MAX_CAPAC; i++)
 							if i == 2
 								option(selected) #{i}
 							else
@@ -39,7 +40,7 @@ block content
 				.form-group
 					label(for='nummembers') Number of users to invite to room
 					select.form-control#nummembers(name='nummembers')
-						- for (var i = 0; i <= maxCapac; i++)
+						- for (var i = 0; i <= MAX_CAPAC; i++)
 							if i == 1
 								option(selected) #{i}
 							else
