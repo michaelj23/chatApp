@@ -30,6 +30,7 @@ db.once('open', function() {
 	console.log('database connected');
 });
 var Schema = mongoose.Schema;
+var ObjectId = Schema.ObjectId;
 // A chatroom's message log is composed of pages, which are arrays of messages.
 // Each page has a certain capacity of messages designating the maximum capacity of 
 // messages the browser will hold.
@@ -55,7 +56,7 @@ var userSchema = new Schema({
 	username: String,
 	password: String,
 	email: String,
-	chatrooms: [chatroomSchema]
+	chatrooms: [ObjectId]
 });
 var User = mongoose.model('User', userSchema);
 
@@ -84,7 +85,6 @@ io.on('connection', function(socket) {
 	socket.on('message', function(message) {
 		if (socket.room) { // user must have officially joined the chatroom
 			message.timestamp = createTimestamp();
-
 			io.to(socket.room).emit('message', message);
 		}
 	});
@@ -183,7 +183,8 @@ app.route('/signup')
 					lastname: accountInfo.lastname,
 					username: accountInfo.username,
 					password: accountInfo.password,
-					email: accountInfo.email
+					email: accountInfo.email,
+					chatrooms: []
 				}, function(err, user) {
 					if (err) {
 						next(err);
@@ -199,12 +200,10 @@ app.route('/signup')
 	});
 
 
-// TODO: chat log feature; only store 50 or so messages in the browser DOM for performance
 // TODO: new joiner of chat room can load previous messages
-// TODO: create groups of users/friends?
-// TODO: remove chat room
+// TODO: create groups of users/friends
 app.route('/chatroom')
-	.get('/chatroom', authenticate, function(req, res, next) {	
+	.get(authenticate, function(req, res, next) {	
 		Chatroom.findById(req.query.id, function(err, chatroom) {
 			if (err || !chatroom) {
 				next(err);
@@ -230,7 +229,7 @@ app.route('/chatroom')
 		});
 	})
 	// save an emitted message
-	.post('/chatroom', authenticate, function(req, res, next) {
+	.post(authenticate, function(req, res, next) {
 		var newMessage = req.body;
 		Chatroom.findById(newMessage.id, function(err, chatroom) {
 			if (err || !chatroom) {
@@ -270,12 +269,13 @@ app.get('/contactdir', authenticate, function(req, res, next) {
 		} else {
 			var memberRooms = {};
 			var otherRooms = [];
-			var memberOfChatrooms = req.session.user.chatrooms;
+			var memberOfChatroomIds = req.session.user.chatrooms;
+			var memberOfChatrooms = [];
 			if (rooms) {
 				// eliminate duplicates between all public rooms and rooms that this user
 				// is a member of
-				for (var i = 0; i < memberOfChatrooms.length; i += 1) {
-					memberRooms[memberOfChatrooms[i]._id] = true;
+				for (var i = 0; i < memberOfChatroomIds.length; i += 1) {
+					memberRooms[memberOfChatroomIds] = true;
 				}
 				for (i = 0; i < rooms.length; i += 1) {
 					if (!(rooms[i]._id in memberRooms)) {
@@ -283,16 +283,111 @@ app.get('/contactdir', authenticate, function(req, res, next) {
 					}
 				}
 			}
-
-			res.render('contactdir', {
-				user: req.session.user.username,
-				memberOf: memberOfChatrooms,
-				publicRooms: otherRooms
-			});
-			return;
+			if (memberOfChatroomIds.length == 0) {
+				res.render('contactdir', {
+					user: req.session.user.username,
+					memberOf: memberOfChatrooms,
+					publicRooms: otherRooms
+				});
+				return;
+			} else {
+				// find the chatroom docs for each chatroom id in memberOfchatroomIds
+				for (i = 0; i < memberOfChatroomIds.length; i += 1) {
+					Chatroom.findById(memberOfChatroomIds[i], function(err, chatroom) {
+						memberOfChatrooms.push(chatroom);
+						if (memberOfChatrooms.length == memberOfChatroomIds.length) {
+							// we have found all chatroom docs
+							res.render('contactdir', {
+								user: req.session.user.username,
+								memberOf: memberOfChatrooms,
+								publicRooms: otherRooms
+							});
+							return;
+						}
+					});
+				}				
+			}
 		}
 	});
 });
+// leave a chatroom from the directory
+app.post('/leavechatroom', authenticate, function(req, res, next) {
+	var toRemove = req.body;
+	Chatroom.findById(toRemove.id, function(err, chatroom) {
+		if (err || !chatroom) {
+			next(err);
+		} else {
+			var index = chatroom.members.indexOf(req.session.user.username);
+			if (index == -1 || req.session.user.username != toRemove.user) {
+				// session user doesn't match request's user or user is not in
+				// chatroom to leave
+				res.send('failure');
+				return;
+			} else {
+				chatroom.members.splice(index, 1); // remove user from chatroom's members
+				var userChatroomIds = req.session.user.chatrooms;
+				for (var i = 0; i < userChatroomIds.length; i += 1) {
+					if (String(userChatroomIds[i]) == String(chatroom._id)) {
+						userChatroomIds.splice(i, 1); // remove chatroom from user's chatrooms
+						break;
+					}
+				}
+				if (chatroom.members.length == 0) {
+					// if chatroom is empty, just delete it
+					chatroom.remove(function(err) {
+						if (err) {
+							next(err);
+						}
+					});
+				} else {
+					chatroom.save(function(err) {
+						if (err) {
+							next(err);
+						}
+					});
+				}
+				req.session.user.save(function(err) {
+					if (err) {
+						next(err);
+					}
+				});
+				res.send('success');
+			}
+		}
+	});
+});
+// become a member of a chatroom from the directory
+app.post('/joinchatroom', authenticate, function(req, res, next) {
+	var toJoin = req.body;
+	Chatroom.findById(toJoin.id, function(err, chatroom) {
+		if (err || !chatroom) {
+			next(err);
+		} else if (req.session.user.username != toJoin.user 
+			|| chatroom.members.indexOf(req.session.user.username) != -1) {
+			// session user and request's user don't match or user is already in the
+			// chatroom to join
+			res.redirect('/contactdir');
+			return;
+		} else {
+			// TODO: chatrooms that require permission to join: don't redirect to them
+			chatroom.members.push(req.session.user.username); // add user as member
+			req.session.user.chatrooms.push(chatroom._id); // add chatroom id to user's chatrooms id list
+			req.session.user.save(function(err) {
+				if (err) {
+					next(err);
+				}
+			});
+			chatroom.save(function(err) {
+				if (err) {
+					next(err);
+				}
+				res.send({
+					id: String(chatroom._id)
+				});
+			});
+		}
+	});
+})
 // creating a new chatroom
 app.route('/newroom')
 	.get(authenticate, function(req, res, next) {
@@ -300,8 +395,14 @@ app.route('/newroom')
 	})
 	.post(authenticate, function(req, res, next) {
 		var chatroomInfo = req.body;
-		if (chatroomInfo.members && typeof chatroomInfo.members == 'string') {
+		if (!chatroomInfo.members) {
+			chatroomInfo.members = [];
+		} else if (typeof chatroomInfo.members == 'string') {
 			chatroomInfo.members = [chatroomInfo.members];
+		}
+		if (chatroomInfo.members.length + 1 > Number(chatroomInfo.capacity)) {
+			res.render('newroom', {error: 'Number of members will exceed chatroom capacity.'})
+			return;
 		}
 		// create chatroom document from form POST data
 		Chatroom.create({
@@ -335,7 +436,7 @@ app.route('/newroom')
 							} else {
 								// add chatroom doc to each member's list of chatrooms
 								users.forEach(function(user) {
-									user.chatrooms.push(chatroom);
+									user.chatrooms.push(chatroom._id);
 									user.save(function(err) {
 										if (err) {
 											next(err);
@@ -368,7 +469,7 @@ app.get('/autocomplete', function(req, res, next) {
 			return;
 		}
 	});
-})
+});
 
 app.use(function(req, res, next) {
 	var err = new Error('Not Found');

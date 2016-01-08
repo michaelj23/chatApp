@@ -5,7 +5,6 @@ block title
 
 block content
 	// largest room capacity
-	// TODO: user should not be able to invite more users than capacity
 	- var MAX_CAPAC = 30;
 	.container
 		.row
@@ -14,6 +13,9 @@ block content
 			.col-xs-2(style='padding:0px')
 				form(action='/logout' method='post')
 					button(type='submit' class='btn btn-danger' style='margin-top:20px;margin-bottom:10px;margin-left:5px;float:right') Log out
+		if error
+			.row
+				.alert(class='alert-danger' role='alert') #{error}
 		.row
 			form(action='/newroom' method='post')
 				.form-group
@@ -22,7 +24,7 @@ block content
 				.form-group
 					label(for='capacity') Capacity (maximum #{MAX_CAPAC})
 					select.form-control#capacity(name='capacity')
-						- for (var i = 0; i <= MAX_CAPAC; i++)
+						- for (var i = 1; i <= MAX_CAPAC; i++)
 							if i == 2
 								option(selected) #{i}
 							else
