@@ -41,13 +41,20 @@ var pageSchema = new Schema({
 		timestamp: String
 	}]
 });
+var notificationSchema = new Schema({
+	type: String,
+	chatroomId: ObjectId,
+	chatroomName: String,
+	sender: String
+});
 var chatroomSchema = new Schema({
 	name: String,
+	admin: String, // admin user is by default the creator of the chatroom
 	members: [String],
 	messageLog: [pageSchema],
 	capacity: Number,
-	isPublic: Boolean,
-	needPermission: Boolean
+	isPublic: Boolean, // if true, anyone can see this chatroom in their directory
+	needPermission: Boolean // if true, user who wants to join must have permissino from admin
 });
 var Chatroom = mongoose.model('Chatroom', chatroomSchema);
 var userSchema = new Schema({
@@ -56,7 +63,11 @@ var userSchema = new Schema({
 	username: String,
 	password: String,
 	email: String,
-	chatrooms: [ObjectId]
+	chatrooms: [{
+		id: ObjectId,
+		approved: Boolean // if false, user is still awaiting approval from chatroom's admin
+	}],
+	notifications: [notificationSchema]
 });
 var User = mongoose.model('User', userSchema);
 
@@ -184,7 +195,8 @@ app.route('/signup')
 					username: accountInfo.username,
 					password: accountInfo.password,
 					email: accountInfo.email,
-					chatrooms: []
+					chatrooms: [],
+					notifications: []
 				}, function(err, user) {
 					if (err) {
 						next(err);
@@ -200,8 +212,13 @@ app.route('/signup')
 	});
 
 
-// TODO: new joiner of chat room can load previous messages
 // TODO: create groups of users/friends
+// TODO: make notification counter display number of notifications, and update in real-time: socket io in contactdir
+// TODO: invite other users from chatroom page - only if admin -> need a search bar and need to determine whether a search query is valid/has already been invited/is already in the room
+// TODO: new joiner of chat room can load previous messages
+// TODO: cleanup
+
+
 app.route('/chatroom')
 	.get(authenticate, function(req, res, next) {	
 		Chatroom.findById(req.query.id, function(err, chatroom) {
@@ -267,44 +284,60 @@ app.get('/contactdir', authenticate, function(req, res, next) {
 		if (err) {
 			next(err);
 		} else {
-			var memberRooms = {};
-			var otherRooms = [];
-			var memberOfChatroomIds = req.session.user.chatrooms;
-			var memberOfChatrooms = [];
+			var userRooms = {};
+			var userChatrooms = req.session.user.chatrooms;
+			var memberOfChatrooms = []; // rooms this user is a member of
+			var memberPendingChatrooms = []; // rooms this user is awaiting membership
+			var otherRooms = []; // other public rooms
 			if (rooms) {
 				// eliminate duplicates between all public rooms and rooms that this user
 				// is a member of
-				for (var i = 0; i < memberOfChatroomIds.length; i += 1) {
-					memberRooms[memberOfChatroomIds] = true;
-				}
-				for (i = 0; i < rooms.length; i += 1) {
-					if (!(rooms[i]._id in memberRooms)) {
-						otherRooms.push(rooms[i]);
+				userChatrooms.forEach(function(room) {
+					userRooms[room.id] = true;
+				});
+				rooms.forEach(function(room) {
+					if (!(room._id in userRooms)) {
+						otherRooms.push(room);
 					}
-				}
+				}); 
 			}
-			if (memberOfChatroomIds.length == 0) {
+			if (userChatrooms.length == 0) {
 				res.render('contactdir', {
 					user: req.session.user.username,
 					memberOf: memberOfChatrooms,
+					memberPending: memberPendingChatrooms,
 					publicRooms: otherRooms
 				});
 				return;
 			} else {
 				// find the chatroom docs for each chatroom id in memberOfchatroomIds
-				for (i = 0; i < memberOfChatroomIds.length; i += 1) {
-					Chatroom.findById(memberOfChatroomIds[i], function(err, chatroom) {
-						memberOfChatrooms.push(chatroom);
-						if (memberOfChatrooms.length == memberOfChatroomIds.length) {
-							// we have found all chatroom docs
-							res.render('contactdir', {
-								user: req.session.user.username,
-								memberOf: memberOfChatrooms,
-								publicRooms: otherRooms
-							});
-							return;
+				function findChatroom(index) {
+					var roomInfo = userChatrooms[index];
+					Chatroom.findById(roomInfo.id, function(err, chatroom) {
+						if (err) {
+							next(err);
+						} else {
+							if (roomInfo.approved) {
+								memberOfChatrooms.push(chatroom);
+							} else {
+								memberPendingChatrooms.push(chatroom);
+							}
+							if (memberOfChatrooms.length + memberPendingChatrooms.length 
+								== userChatrooms.length) {
+								// we have found all chatroom docs
+								res.render('contactdir', {
+									user: req.session.user.username,
+									memberOf: memberOfChatrooms,
+									memberPending: memberPendingChatrooms,
+									publicRooms: otherRooms
+								});
+								return;								
+							}
 						}
 					});
+				}
+				for (var i = 0; i < userChatrooms.length; i += 1) {
+					findChatroom(i);
 				}				
 			}
 		}
@@ -327,7 +360,7 @@ app.post('/leavechatroom', authenticate, function(req, res, next) {
 				chatroom.members.splice(index, 1); // remove user from chatroom's members
 				var userChatroomIds = req.session.user.chatrooms;
 				for (var i = 0; i < userChatroomIds.length; i += 1) {
-					if (String(userChatroomIds[i]) == String(chatroom._id)) {
+					if (String(userChatroomIds[i].id) == String(chatroom._id)) {
 						userChatroomIds.splice(i, 1); // remove chatroom from user's chatrooms
 						break;
 					}
@@ -340,6 +373,10 @@ app.post('/leavechatroom', authenticate, function(req, res, next) {
 						}
 					});
 				} else {
+					if (req.session.user.username == chatroom.admin) {
+						// if the admin has left, assign the role of admin to another chatroom member
+						chatroom.admin = chatroom.members[0];
+					}
 					chatroom.save(function(err) {
 						if (err) {
 							next(err);
@@ -368,10 +405,43 @@ app.post('/joinchatroom', authenticate, function(req, res, next) {
 			// chatroom to join
 			res.redirect('/contactdir');
 			return;
+		} else if (chatroom.needPermission) { // need admin's permission to join
+			User.findOne({username: chatroom.admin}, function(err, admin) {
+				if (err) {
+					next(err);
+				} else {
+					// send request to admin
+					admin.notifications.push({
+						type: 'request',
+						chatroomId: chatroom._id,
+						chatroomName: chatroom.name,
+						sender: req.session.user.username
+					});
+					admin.save(function(err) {
+						if (err) {
+							next(err);
+						}
+					});
+					// add chatroom to user's chatrooms list as not approved yet
+					req.session.user.chatrooms.push({
+						id: chatroom._id,
+						approved: false
+					});
+					req.session.user.save(function(err) {
+						if (err) {
+							next(err);
+						}
+					});
+					res.send('Request sent');
+				}
+			});
 		} else {
-			// TODO: chatrooms that require permission to join: don't redirect to them
 			chatroom.members.push(req.session.user.username); // add user as member
-			req.session.user.chatrooms.push(chatroom._id); // add chatroom id to user's chatrooms id list
+			// add chatroom to user's chatrooms list as approved
+			req.session.user.chatrooms.push({
+				id: chatroom._id,
+				approved: true
+			});
 			req.session.user.save(function(err) {
 				if (err) {
 					next(err);
@@ -381,13 +451,11 @@ app.post('/joinchatroom', authenticate, function(req, res, next) {
 				if (err) {
 					next(err);
 				}
-				res.send({
-					id: String(chatroom._id)
-				});
+				res.send(String(chatroom._id));
 			});
 		}
 	});
-})
+});
 // creating a new chatroom
 app.route('/newroom')
 	.get(authenticate, function(req, res, next) {
@@ -407,7 +475,8 @@ app.route('/newroom')
 		// create chatroom document from form POST data
 		Chatroom.create({
 			name: chatroomInfo.chatroomname,
-			members: [],
+			admin: req.session.user.username,
+			members: [req.session.user.username],
 			messageLog: [],
 			capacity: Number(chatroomInfo.capacity),
 			isPublic: (chatroomInfo.privacy == 'Public') ? true : false,
@@ -416,37 +485,38 @@ app.route('/newroom')
 			if (err) {
 				next(err);
 			} else {
-				// find all members via regex, remembering to include the logged-in user
-				chatroomInfo.members.push(req.session.user.username);
+				// find all invited members via regex
 				var regex = new RegExp('^' + chatroomInfo.members.join('$|^') + '$');
 				User.find({username: regex}, function(err, users) {
 					if (err) {
 						next(err);
 					} else {
-						// TODO: users only become members of a chatroom once they accept
-						// the invitation
-
-						// update chatroom doc's members attribute with users' ids
-						chatroom.members = users.map(function(user) {
-							return user.username;
+						// send invitation to all desired members
+						var invite = {
+							type: 'invite',
+							chatroomId: chatroom._id,
+							chatroomName: chatroom.name,
+							sender: req.session.user.username
+						}
+						users.forEach(function(user) {
+							user.notifications.push(invite);
+							user.save(function(err) {
+								if (err) {
+									next(err);
+								}
+							});
 						});
-						chatroom.save(function(err, chatroom) {
-							if (err) {
-								next(err);
-							} else {
-								// add chatroom doc to each member's list of chatrooms
-								users.forEach(function(user) {
-									user.chatrooms.push(chatroom._id);
-									user.save(function(err) {
-										if (err) {
-											next(err);
-										}
-									});
-								});
-								res.redirect('/chatroom?id=' + chatroom._id);
-								return;
-							}
-						});
+					}
+				});
+				req.session.user.chatrooms.push({
+					id: chatroom._id,
+					approved: true
+				});
+				req.session.user.save(function(err) {
+					if (err) {
+						next(err);
+					} else {
+						res.redirect('/chatroom?id=' + chatroom._id);
 					}
 				});
 			}
@@ -469,6 +539,99 @@ app.get('/autocomplete', function(req, res, next) {
 			return;
 		}
 	});
+});
+app.get('/notifications', authenticate, function(req, res, next) {
+	res.render('notifications', {
+		notifications: req.session.user.notifications
+	});
+});
+// have user accept the chatroom invite designated by the given notification
+function acceptInvite(user, notification, next) {
+	// add notification's chatroom to list of the accepter of the invite
+	user.chatrooms.push({
+		id: notification.chatroomId,
+		approved: true
+	});
+	Chatroom.findById(notification.chatroomId, function(err, chatroom) {
+		if (err) next(err);
+		else {
+			chatroom.members.push(user.username);
+			chatroom.save(function(err) {
+				if (err) next(err);
+			});
+		}
+	});
+}
+// process acceptions/rejections of chatroom invitations
+app.post('/invite', authenticate, function(req, res, next) {
+	var notification = req.session.user.notifications.id(req.body.notificationId);
+	if (!notification || notification.type != 'invite') {
+		// notification is not an invite or does not exist for the session's user
+		res.send('Error: invalid notification');
+	}
+	else {
+		if (req.body.action == 'accept') {
+			acceptInvite(req.session.user, notification, next);
+		} // note that if we reject an invite, we make no changes to the user's chatrooms
+		// remove the notification
+		notification.remove();
+		req.session.user.save(function(err) {
+			if (err) next(err);
+		});
+		res.send('Success');
+	}	
+});
+// admin of a chatroom accepts user's request to join the chatroom
+function acceptRequest(user, notification, next) {
+	// find the chatroom the sender of the notification can now join and reset its approved attribute
+	for (var i = 0; i < user.chatrooms.length; i++) {
+		if (String(user.chatrooms[i].id) == String(notification.chatroomId)) {
+			user.chatrooms[i].approved = true;
+			break;
+		}
+	}
+	// add the sender to the chatroom's list of members
+	Chatroom.findById(notification.chatroomId, function(err, chatroom) {
+		if (err) next(err);
+		else {
+			chatroom.members.push(user.username);
+			chatroom.save(function(err) {
+				if (err) next(err);
+			});
+		}
+	});
+}
+// admin rejects user's request to join chatroom
+function rejectRequest(user, notification) {
+	// find the chatroom to which the sender of the notification has been denied access and remove it
+	// from the sender's chatrooms list
+	for (var i = 0; i < user.chatrooms.length; i++) {
+		if (String(user.chatrooms[i].id) == String(notification.chatroomId)) {
+			user.chatrooms.splice(i, 1);
+			break;
+		}
+	}
+}
+app.post('/request', authenticate, function(req, res, next) {
+	var notification = req.session.user.notifications.id(req.body.notificationId);
+	if (!notification || notification.type != 'request') res.send('Error: invalid notification');
+	else {
+		User.findOne({username: notification.sender}, function(err, user) {
+			if (err || !user) next(err);
+			else {
+				if (req.body.action == 'accept') acceptRequest(user, notification, next);
+				else rejectRequest(user, notification);
+				user.save(function(err) {
+					if (err) next(err);
+				});
+			}
+		});
+		notification.remove();
+		req.session.user.save(function(err) {
+			if (err) next(err);
+		});
+		res.send('Success');
+	}
 });
 
 app.use(function(req, res, next) {

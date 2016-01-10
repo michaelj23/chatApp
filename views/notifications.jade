@@ -1,0 +1,58 @@
+extends ./header.jade
+
+block title
+	title User's notifications
+
+block content
+	.container
+		.row
+			.col-xs-9(style='padding:0px')
+				h1 Notifications
+			.col-xs-3(style='padding:0px')
+				form(action='/logout' method='post')
+					button(type='submit' class='btn btn-danger' style='margin-top:20px;margin-bottom:10px;margin-left:5px;float:right') Log out
+				a(role='button' class='btn btn-danger' style='margin-top:20px;margin-bottom:10px;margin-left:5px;float:right' href='/contactdir')  Go back
+		.row
+			div(style='height:30em;background-color:gainsboro;overflow:auto')
+				table(class='table table-hover table-bordered' style='background-color:white')
+					tr
+						th Notification
+						th Action
+					each notification in notifications
+						- var rowClass = notification.type;
+						tr(id='#{notification._id}' class='#{rowClass}')
+							if rowClass == 'invite'
+								td #{notification.sender} invites you to join chatroom #{notification.chatroomName}
+							else if rowClass == 'request'
+								td #{notification.sender} requests to join chatroom #{notification.chatroomName}
+							td
+								button.accept(type='button' class='btn btn-success' style='margin-right:5px') Accept
+								button.reject(type='button' class='btn btn-danger') Reject
+
+	script.
+		function processNotification(button, action) {
+			var row = button.closest('tr');
+			var path = '/' + row.attr('class');
+			$.ajax({
+				url: path,
+				method: 'POST',
+				data: {
+					notificationId: row.attr('id'),
+					action: action
+				},
+				dataType: 'text',
+				error: function() {
+					console.log('Error processing notification');
+				},
+				success: function(data) {
+					if (data == 'Success') row.remove();
+					else console.log(data);
+				}
+			});		
+		}
+		$('.accept').click(function() {
+			processNotification($(this), 'accept');
+		});
+		$('.reject').on('click', function() {
+			processNotification($(this), 'reject');
+		});

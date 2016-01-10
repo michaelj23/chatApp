@@ -4,6 +4,7 @@ block title
 	title #{user}'s Contact Page
 
 block content
+	// TODO: socket to listen for new notifications, and for approvals/rejections of requests (modify table)
 	.container
 		.row
 			.col-xs-10(style='padding:0px')
@@ -12,10 +13,13 @@ block content
 				form(action='/logout' method='post')
 					button(type='submit' class='btn btn-danger' style='margin-top:20px;margin-bottom:10px;margin-left:5px;float:right') Log out
 		.row
-			.col-xs-10(style='padding:0px')
+			.col-xs-8(style='padding:0px')
 				h2 Here are your chatrooms:
-			.col-xs-2(style='padding:0px')
+			.col-xs-4(style='padding:0px')
 				a(role='button' class='btn btn-primary' style='margin-top:20px;margin-bottom:10px;margin-left:5px;float:right' href='/newroom') Create a new chatroom
+				div(style='position:relative;float:right;margin-top:20px;margin-bottom:10px')
+					a(role='button' class='btn btn-primary' href='/notifications') View notifications
+					div(style='position:absolute;top:-12px;right:4px;padding:2px 2px 2px 2px;background-color:red;color:white;font-weight:bold;font-size:1em;border-radius:2px') 1
 		.row
 			div(style='height:30em;background-color:gainsboro;overflow:auto')
 				table(class='table table-hover table-bordered' style='background-color:white')
@@ -41,6 +45,20 @@ block content
 								- var chatroomURL = '/chatroom?id=' + chatroom._id;
 								a.enter(role='button' class='btn btn-primary' style='margin-right:5px' href=chatroomURL) Connect
 								button.leave(type='button' class='btn btn-danger leave' id='#{chatroom._id}') Leave
+					each chatroom in memberPending
+						tr
+							td #{chatroom.name}
+							if chatroom.isPublic
+								td Yes
+							else
+								td No
+							if chatroom.needPermission
+								td Yes
+							else
+								td No
+							td #{chatroom.members.length} / #{chatroom.capacity}
+							td
+								button.join(type='button' class='btn btn-success' id='#{chatroom._id}' disabled='disabled') Request sent						
 					each chatroom in publicRooms
 						tr
 							td #{chatroom.name}
@@ -75,21 +93,29 @@ block content
 					}
 				});
 			});
+			// expected response if the chatroom we want to join needs permission from admin
+			var responseForNeedPermission = 'Request sent';
 			$('.join').click(function() {
 				var chatroomId = $(this).attr('id');
 				$.ajax({
 					url: '/joinchatroom',
 					method: 'POST',
+					context: $(this)[0],
 					data: {
 						user: '#{user}',
 						id: chatroomId
 					},
-					dataType: 'json',
+					dataType: 'text',
 					error: function() {
 						console.log('Error joining chatroom');
 					},
 					success: function(data) {
-						window.location.href = '/chatroom?id=' + data.id;
+						if (data == responseForNeedPermission) {
+							$(this).text(data);
+							$(this).attr('disabled', 'disabled');
+						} else {
+							window.location.href = '/chatroom?id=' + data;
+						}
 					}
 				});
 			});
