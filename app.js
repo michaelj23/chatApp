@@ -84,6 +84,12 @@ function createTimestamp() {
 
 
 io.on('connection', function(socket) {
+	socket.on('directory', function(username) {
+		socket.join(username);
+	});
+	socket.on('notification', function(username) {
+		io.to(username).emit('notification');
+	});
 	socket.on('join chatroom', function(roomData) {
 		socket.room = roomData.chatroomId;
 		socket.username = roomData.username;
@@ -306,7 +312,8 @@ app.get('/contactdir', authenticate, function(req, res, next) {
 					user: req.session.user.username,
 					memberOf: memberOfChatrooms,
 					memberPending: memberPendingChatrooms,
-					publicRooms: otherRooms
+					publicRooms: otherRooms,
+					numNotifications: req.session.user.notifications.length
 				});
 				return;
 			} else {
@@ -316,6 +323,12 @@ app.get('/contactdir', authenticate, function(req, res, next) {
 					Chatroom.findById(roomInfo.id, function(err, chatroom) {
 						if (err) {
 							next(err);
+						} else if (!chatroom) { // chatroom has been deleted
+							// remove the obsolete chatroom from the user's chatroom list
+							userChatrooms.splice(index, 1);
+							req.session.user.save(function(err) {
+								if (err) next(err);
+							});
 						} else {
 							if (roomInfo.approved) {
 								memberOfChatrooms.push(chatroom);
@@ -329,7 +342,8 @@ app.get('/contactdir', authenticate, function(req, res, next) {
 									user: req.session.user.username,
 									memberOf: memberOfChatrooms,
 									memberPending: memberPendingChatrooms,
-									publicRooms: otherRooms
+									publicRooms: otherRooms,
+									numNotifications: req.session.user.notifications.length
 								});
 								return;								
 							}
@@ -499,12 +513,15 @@ app.route('/newroom')
 							sender: req.session.user.username
 						}
 						users.forEach(function(user) {
-							user.notifications.push(invite);
-							user.save(function(err) {
-								if (err) {
-									next(err);
-								}
-							});
+							if (user.username != req.session.user.username) {
+								// make sure the session user doesn't invite him/herself
+								user.notifications.push(invite);
+								user.save(function(err) {
+									if (err) {
+										next(err);
+									}
+								});
+							}
 						});
 					}
 				});
@@ -547,16 +564,21 @@ app.get('/notifications', authenticate, function(req, res, next) {
 });
 // have user accept the chatroom invite designated by the given notification
 function acceptInvite(user, notification, next) {
-	// add notification's chatroom to list of the accepter of the invite
-	user.chatrooms.push({
-		id: notification.chatroomId,
-		approved: true
-	});
 	Chatroom.findById(notification.chatroomId, function(err, chatroom) {
 		if (err) next(err);
+		else if (!chatroom) return; // chatroom has been deleted
 		else {
 			chatroom.members.push(user.username);
 			chatroom.save(function(err) {
+				if (err) next(err);
+			});
+			// add notification's chatroom to list of the accepter of the invite
+			user.chatrooms.push({
+				id: notification.chatroomId,
+				approved: true
+			});
+			notification.remove();
+			user.save(function(err) {
 				if (err) next(err);
 			});
 		}
@@ -571,31 +593,36 @@ app.post('/invite', authenticate, function(req, res, next) {
 	}
 	else {
 		if (req.body.action == 'accept') {
-			acceptInvite(req.session.user, notification, next);
-		} // note that if we reject an invite, we make no changes to the user's chatrooms
-		// remove the notification
-		notification.remove();
-		req.session.user.save(function(err) {
-			if (err) next(err);
-		});
+			acceptInvite(req.session.user, notification, next); // acceptInvite removes the notification as well
+		} else {
+			// note that if we reject an invite, we make no changes to the user's chatrooms
+			notification.remove();
+			req.session.user.save(function(err) {
+				if (err) next(err);
+			});			
+		} 
 		res.send('Success');
 	}	
 });
 // admin of a chatroom accepts user's request to join the chatroom
 function acceptRequest(user, notification, next) {
-	// find the chatroom the sender of the notification can now join and reset its approved attribute
-	for (var i = 0; i < user.chatrooms.length; i++) {
-		if (String(user.chatrooms[i].id) == String(notification.chatroomId)) {
-			user.chatrooms[i].approved = true;
-			break;
-		}
-	}
 	// add the sender to the chatroom's list of members
 	Chatroom.findById(notification.chatroomId, function(err, chatroom) {
 		if (err) next(err);
+		else if (!chatroom) return;
 		else {
 			chatroom.members.push(user.username);
 			chatroom.save(function(err) {
+				if (err) next(err);
+			});
+			// find the chatroom the sender of the notification can now join and reset its approved attribute
+			for (var i = 0; i < user.chatrooms.length; i++) {
+				if (String(user.chatrooms[i].id) == String(notification.chatroomId)) {
+					user.chatrooms[i].approved = true;
+					break;
+				}
+			}
+			user.save(function(err) {
 				if (err) next(err);
 			});
 		}
@@ -611,6 +638,9 @@ function rejectRequest(user, notification) {
 			break;
 		}
 	}
+	user.save(function(err) {
+		if (err) next(err);
+	});
 }
 app.post('/request', authenticate, function(req, res, next) {
 	var notification = req.session.user.notifications.id(req.body.notificationId);
@@ -621,9 +651,6 @@ app.post('/request', authenticate, function(req, res, next) {
 			else {
 				if (req.body.action == 'accept') acceptRequest(user, notification, next);
 				else rejectRequest(user, notification);
-				user.save(function(err) {
-					if (err) next(err);
-				});
 			}
 		});
 		notification.remove();

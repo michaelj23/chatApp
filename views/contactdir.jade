@@ -4,7 +4,6 @@ block title
 	title #{user}'s Contact Page
 
 block content
-	// TODO: socket to listen for new notifications, and for approvals/rejections of requests (modify table)
 	.container
 		.row
 			.col-xs-10(style='padding:0px')
@@ -19,7 +18,10 @@ block content
 				a(role='button' class='btn btn-primary' style='margin-top:20px;margin-bottom:10px;margin-left:5px;float:right' href='/newroom') Create a new chatroom
 				div(style='position:relative;float:right;margin-top:20px;margin-bottom:10px')
 					a(role='button' class='btn btn-primary' href='/notifications') View notifications
-					div(style='position:absolute;top:-12px;right:4px;padding:2px 2px 2px 2px;background-color:red;color:white;font-weight:bold;font-size:1em;border-radius:2px') 1
+					- var display = 'none';
+					if numNotifications > 0
+						- display = 'inline'
+					#counter(style='position:absolute;top:-12px;right:4px;padding:2px 2px 2px 2px;background-color:red;color:white;font-weight:bold;font-size:1em;border-radius:2px;display:#{display}') #{numNotifications}
 		.row
 			div(style='height:30em;background-color:gainsboro;overflow:auto')
 				table(class='table table-hover table-bordered' style='background-color:white')
@@ -69,9 +71,18 @@ block content
 								td No
 							td #{chatroom.members.length} / #{chatroom.capacity}
 							td
-								button.join(type='button' class='btn btn-success join' id='#{chatroom._id}') Join
+								button.join(type='button' class='btn btn-success join' id='#{chatroom._id}' data-admin='#{chatroom.admin}') Join
 
+		script(src='/socket.io/socket.io.js')
 		script.
+			var socket = io();
+			socket.emit('directory', '#{user}');
+			socket.on('notification', function() {
+				var counter = $('#counter');
+				var numNotifications = Number(counter.text());
+				counter.text(numNotifications + 1);
+				if (numNotifications == 0) counter.css('display', 'inline');
+			});
 			$('.leave').click(function() {
 				var chatroomId = $(this).attr('id');
 				var tableRow = $(this).closest('tr');
@@ -88,6 +99,7 @@ block content
 					},
 					success: function(data) {
 						if (data == 'success') {
+							// remove the chatroom's row from the table
 							tableRow.remove();
 						}
 					}
@@ -97,6 +109,7 @@ block content
 			var responseForNeedPermission = 'Request sent';
 			$('.join').click(function() {
 				var chatroomId = $(this).attr('id');
+				var chatroomAdmin = $(this).attr('data-admin');
 				$.ajax({
 					url: '/joinchatroom',
 					method: 'POST',
@@ -111,9 +124,14 @@ block content
 					},
 					success: function(data) {
 						if (data == responseForNeedPermission) {
+							// change button's text and disable it to signify that a request to join 
+							// has been sent and is awaiting approval
 							$(this).text(data);
 							$(this).attr('disabled', 'disabled');
+							// tell admin that they have a new request notification
+							socket.emit('notification', chatroomAdmin);
 						} else {
+							// else if no approval is needed, simply redirect to the newly joined chatroom
 							window.location.href = '/chatroom?id=' + data;
 						}
 					}

@@ -50,12 +50,22 @@ block content
 				.form-group#members
 					label(for='members') Enter usernames to invite other users to this room. Duplicates and invalid usernames will be ignored!
 					input.form-control(name='members' style='margin-bottom:5px' placeholder='Enter username...')
-				button(type='submit' class='btn btn-success') Create chatroom
+				button#create(type='submit' class='btn btn-success') Create chatroom
 
 
 		link(rel='stylesheet' href='css/jquery-ui.min.css')
 		script(src='javascript/jquery-ui.min.js')
+		script(src='/socket.io/socket.io.js')
 		script.
+			var socket = io();
+			$('#create').click(function() {
+				// before submitting, emit an invite notification to all invited users
+				var invited = $('[name=members]');
+				for (var i = 0; i < invited.length; i++) {
+					var user = $(invited[i]).val();
+					if (user) socket.emit('notification', user);
+				}
+			});
 			var options = {
 				source: '/autocomplete'
 			}

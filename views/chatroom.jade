@@ -23,6 +23,8 @@ block content
 
 		.row(class='panel' style='height:75%;border:2px solid black;overflow:auto')
 			ul.panel-body#messages(class='list-unstyled' style='font-size:20px')
+				li
+					a(href='#') Load previous messages
 				- var pastTime = '';
 				- var color;
 				each msg in curMessages
@@ -38,6 +40,8 @@ block content
 						span(style='color: #{color}') #{msg.username}: 
 						| #{msg.text}
 						span(style='float:right') #{msg.timestamp}
+				li
+					a(href='#') Load next messages
 
 
 		.row(style='height:10%')
