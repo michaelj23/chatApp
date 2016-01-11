@@ -235,10 +235,13 @@ app.route('/chatroom')
 				return;
 			} else {
 				var curmsg;
+				var curPage;
 				if (chatroom.messageLog.length > 0) {
 					curmsg = chatroom.messageLog[chatroom.messageLog.length - 1].messages;
+					curPage = chatroom.messageLog.length - 1;
 				} else {
 					curmsg = [];
+					curPage = 0;
 				}
 				res.render('chatroom', {
 					name: chatroom.name,
@@ -246,7 +249,8 @@ app.route('/chatroom')
 					user: req.session.user.username,
 					members: chatroom.members,
 					curMessages: curmsg,
-					numMessages: curmsg.length
+					numMessages: curmsg.length,
+					curPage: curPage
 				});
 			}
 		});
@@ -284,6 +288,21 @@ app.route('/chatroom')
 			}
 		});
 	});
+// get a desired page of messages from a chatroom's message log; used to load previous/next messages
+// in chatroom view
+app.get('/getpage', authenticate, function(req, res, next) {
+	var chatroomId = req.query.id;
+	var pageNum = Number(req.query.pageNum);
+	Chatroom.findById(chatroomId, function(err, chatroom) {
+		if (err || !chatroom || pageNum < 0 || pageNum >= chatroom.messageLog.length
+			|| chatroom.members.indexOf(req.session.user.username) == -1) {
+			// session's user must belong to the chatroom in the query
+			next(err);
+		} else {
+			res.send(chatroom.messageLog[pageNum]);
+		}
+	});
+});
 // chatroom directory page
 app.get('/contactdir', authenticate, function(req, res, next) {
 	Chatroom.find({isPublic: true}, function(err, rooms) {
@@ -642,6 +661,7 @@ function rejectRequest(user, notification) {
 		if (err) next(err);
 	});
 }
+// process acceptions/rejections of requests to join chatrooms
 app.post('/request', authenticate, function(req, res, next) {
 	var notification = req.session.user.notifications.id(req.body.notificationId);
 	if (!notification || notification.type != 'request') res.send('Error: invalid notification');

@@ -23,25 +23,32 @@ block content
 
 		.row(class='panel' style='height:75%;border:2px solid black;overflow:auto')
 			ul.panel-body#messages(class='list-unstyled' style='font-size:20px')
-				li
-					a(href='#') Load previous messages
-				- var pastTime = '';
-				- var color;
-				each msg in curMessages
-					if msg.username == user
-						- color = 'red';
-					else
-						- color = 'blue';
-					if msg.timestamp == pastTime
-						- msg.timestamp = '';
-					else
-						- pastTime = msg.timestamp;
-					li
-						span(style='color: #{color}') #{msg.username}: 
-						| #{msg.text}
-						span(style='float:right') #{msg.timestamp}
-				li
-					a(href='#') Load next messages
+				- var loadPrevDisplay = 'none';
+				- var loadNextDisplay = 'none';
+				if curPage != 0
+					// there are previous pages that can be displayed
+					- loadPrevDisplay = 'inline';
+				li#loadPrev(style='display:#{loadPrevDisplay}')
+					a#loadPrevLink(href='#') Load previous messages
+				.pageOne
+					- var pastTime = '';
+					- var color;
+					each msg in curMessages
+						if msg.username == user
+							- color = 'red';
+						else
+							- color = 'blue';
+						if msg.timestamp == pastTime
+							- msg.timestamp = '';
+						else
+							- pastTime = msg.timestamp;
+						li
+							span(style='color: #{color}') #{msg.username}: 
+							| #{msg.text}
+							span(style='float:right') #{msg.timestamp}
+				.pageTwo
+				li#loadNext(style='display:#{loadNextDisplay}')
+					a#loadNextLink(href='#') Load next messages
 
 
 		.row(style='height:10%')
@@ -52,7 +59,7 @@ block content
 	script.
 		var socket = io();
 		var curTime = '';
-		var MESSAGE_CAPACITY = 50; // maximum number of messages the browser will hold
+		var MESSAGE_CAPACITY = 50; // maximum number of messages for one page; the browser holds TWO pages
 		var numMessages = #{numMessages}; // number of messages we have already loaded
 		var needNewPage = false;
 		if (numMessages == MESSAGE_CAPACITY) needNewPage = true;
@@ -60,6 +67,15 @@ block content
 			chatroomId:'#{id}',
 			username: '#{user}'
 		});
+
+		var curPage = #{curPage}; // index of most recent page
+		var pageOne = #{curPage}; // index of browser's first page
+		var pageTwo; // index of browser's second page
+		var pageOneBody = $('.pageOne');
+		var pageTwoBody = $('.pageTwo');
+		var curPageBody = pageOneBody; // at the beginning, the most recent page is loaded to page one
+		var loadPrev = $('#loadPrev');
+		var loadNext = $('#loadNext');
 		function sendMessage() {
 			// prevent html injection
 			var txt = $('#message').val().replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -77,7 +93,7 @@ block content
 					text: txt,
 					user: '#{user}'
 				},
-				error: function(jqXHR, textStatus, errorThrown) {
+				error: function() {
 					console.error('Error saving messages');
 				}
 			});		
@@ -87,14 +103,13 @@ block content
 			if (event.which == 13) sendMessage();
 		});
 		socket.on('announcement', function(announcement) {
-			$('#messages').append('<li style="color: grey">' + announcement + '</li>');
-		});
-		socket.on('message', function(message) {
-			if (needNewPage) {
-				// we have surpassed our capacity
-				needNewPage = false;
-				$('#messages').empty();
+			if (curPageBody == pageTwoBody || curPageBody == pageOneBody) {
+				// only display announcements & new messages if most recent page is on the browser screen
+				curPageBody.append('<li style="color: grey">' + announcement + '</li>');
 			}
+		});
+		function formatMessage(message) {
+			// format the html for a message JSON object from server
 			var color;
 			if (message.username == '#{user}') {
 				color = 'red';
@@ -103,12 +118,107 @@ block content
 			}
 			if (message.timestamp == curTime) message.timestamp = '';
 			else curTime = message.timestamp;
-			$('#messages').append('<li><span style="color: ' + color + '">' + message.username + '</span>: ' + message.text + '<span style="float:right">' 
-			+ message.timestamp + '</span></li>');
+			return '<li><span style="color: ' + color + '">' + message.username + '</span>: ' + message.text + '<span style="float:right">' + message.timestamp + '</span></li>';
+		}
+		socket.on('message', function(message) {
+			if (needNewPage) {
+				needNewPage = false;
+				numMessages = 0;
+				curPage += 1;
+				if (pageTwo == curPage - 1) { // if page two was the most recent page:
+					pageOneBody.html(pageTwoBody.html()); // move page two's contents to page one
+					pageTwoBody.empty(); // clear/reset page two
+					// if loadPrev was unavailable before because we are at the beginning of chat history,
+					// display it now
+					if (curPage == 2) loadPrev.css('display', 'inline');
+				}
+				if (!pageTwo || pageTwo == curPage - 1) { 
+					// if page one or two, respectively, were the most recent page
+					pageTwo = curPage;
+					pageOne = pageTwo - 1;
+					curPageBody = pageTwoBody;
+				}
+			}
+			if (curPageBody == pageTwoBody || curPageBody == pageOneBody) {
+				// only display new messages if most recent page is on browser screen
+				curPageBody.append(formatMessage(message));
+			}
 			numMessages += 1;
 			if (numMessages == MESSAGE_CAPACITY) {
 				needNewPage = true;
 			}
+		});
+
+		$('#loadPrevLink').click(function() {
+			$.ajax({
+				url: '/getpage',
+				method: 'GET',
+				data: {
+					id: '#{id}',
+					pageNum: pageOne - 1 // pageOne - 1 is the previous page
+				},
+				dataType: 'json',
+				error: function() {
+					console.log('Error accessing messages');
+				},
+				success: function(data) {
+					// if the most recent page was on browser screen, loading a past page
+					// means we must toggle on loadNext's display because there is now also
+					// a future page to load
+					if (curPageBody) loadNext.css('display', 'inline');
+					// if the most recent page was page two, it has now been replaced, so set
+					// curPageBody to null
+					if (curPageBody == pageTwoBody) curPageBody = null;
+					pageTwo = pageOne;
+					pageOne -= 1;
+					// if page one is 0 (the first page), there are no more past pages
+					if (pageOne == 0) loadPrev.css('display', 'none');
+					pageTwoBody.html(pageOneBody.html());
+					pageOneBody.empty();
+					var messages = data.messages;
+					// fill page one with the new page retrieved from the ajax call
+					for (var i = 0; i < messages.length; i++) {
+						var message = messages[i];
+						pageOneBody.append(formatMessage(message));
+					}
+				}
+			});
+		});
+
+		// note: if loadNext is visible, the current page must not be on the browser screen
+		$('#loadNextLink').click(function() {
+			$.ajax({
+				url: '/getpage',
+				method: 'GET',
+				data: {
+					id: '#{id}',
+					pageNum: pageTwo + 1
+				},
+				dataType: 'json',
+				error: function() {
+					console.log('Error accessing messages');
+				},
+				success: function(data) {
+					// if page one was the first page, toggle on loadPrev's display because
+					// after loading the next page, we have past pages we can load
+					if (pageOne == 0) loadPrev.css('display', 'inline');
+					pageOne = pageTwo;
+					pageTwo += 1;
+					if (pageTwo == curPage) { 
+						// page two is back on the most recent page, so reset curPageBody from null
+						curPageBody = pageTwoBody;
+						// since page two is the most recent page, there are no more future pages to load
+						loadNext.css('display', 'none');
+					}
+					pageOneBody.html(pageTwoBody.html());
+					pageTwoBody.empty();
+					var messages = data.messages;
+					for (var i = 0; i < messages.length; i++) {
+						var message = messages[i];
+						pageTwoBody.append(formatMessage(message));
+					}
+				}
+			});
 		});
 
 		$('#leaveroom').click(function() {
