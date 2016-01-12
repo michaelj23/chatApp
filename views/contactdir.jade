@@ -15,7 +15,7 @@ block content
 			.col-xs-8(style='padding:0px')
 				h2 Here are your chatrooms:
 			.col-xs-4(style='padding:0px')
-				a(role='button' class='btn btn-primary' style='margin-top:20px;margin-bottom:10px;margin-left:5px;float:right' href='/newroom') Create a new chatroom
+				a(role='button' class='btn btn-primary' style='margin-top:20px;margin-bottom:10px;margin-left:5px;float:right' href='/dir/newroom') Create a new chatroom
 				div(style='position:relative;float:right;margin-top:20px;margin-bottom:10px')
 					a(role='button' class='btn btn-primary' href='/notifications') View notifications
 					- var display = 'none';
@@ -44,7 +44,7 @@ block content
 								td No
 							td #{chatroom.members.length} / #{chatroom.capacity}
 							td
-								- var chatroomURL = '/chatroom?id=' + chatroom._id;
+								- var chatroomURL = '/chat/chatroom?id=' + chatroom._id;
 								a.enter(role='button' class='btn btn-primary' style='margin-right:5px' href=chatroomURL) Connect
 								button.leave(type='button' class='btn btn-danger leave' id='#{chatroom._id}') Leave
 					each chatroom in memberPending
@@ -90,7 +90,7 @@ block content
 				var chatroomId = $(this).attr('id');
 				var tableRow = $(this).closest('tr');
 				$.ajax({
-					url: '/leavechatroom',
+					url: '/dir/leavechatroom',
 					method: 'POST',
 					data: {
 						user: '#{user}',
@@ -114,7 +114,7 @@ block content
 				var chatroomId = $(this).attr('id');
 				var chatroomAdmin = $(this).attr('data-admin');
 				$.ajax({
-					url: '/joinchatroom',
+					url: '/dir/joinchatroom',
 					method: 'POST',
 					context: $(this)[0],
 					data: {
@@ -137,7 +137,7 @@ block content
 							}
 						} else {
 							// else if no approval is needed, simply redirect to the newly joined chatroom
-							window.location.href = '/chatroom?id=' + data.msg;
+							window.location.href = '/chat/chatroom?id=' + data.msg;
 						}
 					}
 				});

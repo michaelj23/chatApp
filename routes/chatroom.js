@@ -16,7 +16,7 @@ router.route('/chatroom')
 					message: 'Bad request'
 				});
 			} else if (chatroom.members.indexOf(req.session.user.username) == -1) {
-				res.redirect('/contactdir');
+				res.redirect('/dir/contactdir');
 				return;
 			} else {
 				var curmsg;

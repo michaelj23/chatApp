@@ -6,7 +6,7 @@ var Chatroom = app.Chatroom;
 
 router.get('/', function(req, res, next) {
 	if (req.session.user) {
-		res.redirect('/contactdir');
+		res.redirect('/dir/contactdir');
 		return;
 	} else {
 		res.render('index');
@@ -23,7 +23,7 @@ router.post('/login', function(req, res, next) {
 		} else {
 			req.session.user = user;
 			delete req.session.user.password;
-			res.redirect('/contactdir');
+			res.redirect('/dir/contactdir');
 			return;
 		}
 	});
@@ -35,7 +35,7 @@ router.post('/logout', function(req, res, next) {
 router.route('/signup')
 	.get(function(req, res, next) {
 		if (req.session.user) {
-			res.redirect('/contactdir');
+			res.redirect('/dir/contactdir');
 			return;
 		} else {
 			res.render('signup');
@@ -76,7 +76,7 @@ router.route('/signup')
 					} else {
 						req.session.user = user;
 						delete req.session.user.password;
-						res.redirect('/contactdir');
+						res.redirect('/dir/contactdir');
 					}
 				});
 			}

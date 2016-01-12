@@ -285,7 +285,7 @@ router.route('/newroom')
 					if (err) {
 						next(err);
 					} else {
-						res.redirect('/chatroom?id=' + chatroom._id);
+						res.redirect('/chat/chatroom?id=' + chatroom._id);
 					}
 				});
 			}

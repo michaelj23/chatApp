@@ -5,7 +5,7 @@ var User = app.User;
 var Chatroom = app.Chatroom;
 
 // notifications view
-router.get('/notifications', function(req, res, next) {
+router.get('/', function(req, res, next) {
 	res.render('notifications', {
 		notifications: req.session.user.notifications
 	});

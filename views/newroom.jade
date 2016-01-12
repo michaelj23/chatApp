@@ -17,7 +17,7 @@ block content
 			.row
 				.alert(class='alert-danger' role='alert') #{error}
 		.row
-			form(action='/newroom' method='post')
+			form(action='/dir/newroom' method='post')
 				.form-group
 					label(for='chatroomname') Chatroom name
 					input.form-control#chatroomname(name='chatroomname' value='Chatroom')
@@ -53,8 +53,8 @@ block content
 				button#create(type='submit' class='btn btn-success') Create chatroom
 
 
-		link(rel='stylesheet' href='css/jquery-ui.min.css')
-		script(src='javascript/jquery-ui.min.js')
+		link(rel='stylesheet' href='/css/jquery-ui.min.css')
+		script(src='/javascript/jquery-ui.min.js')
 		script(src='/socket.io/socket.io.js')
 		script.
 			var socket = io();

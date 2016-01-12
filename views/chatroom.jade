@@ -13,7 +13,7 @@ block content
 				button#leaveroom(type='button' class='btn btn-danger' style='margin-top:20px;margin-bottom:10px;margin-left:5px;float:right') Leave room
 				form(action='/logout' method='post')
 					button(type='submit' class='btn btn-danger' style='margin-top:20px;margin-bottom:10px;margin-left:5px;float:right') Log out
-				a(role='button' class='btn btn-danger' style='margin-top:20px;margin-bottom:10px;margin-left:5px;float:right' href='/contactdir')  Go back
+				a(role='button' class='btn btn-danger' style='margin-top:20px;margin-bottom:10px;margin-left:5px;float:right' href='/dir/contactdir')  Go back
 		.row
 			.col-xs-2(style='padding:0px')
 				.dropdown
@@ -61,8 +61,8 @@ block content
 				input.form-control(type='text' id='message' style='height:100%;font-size:20px' placeholder='Type a chat message here')
 			button.col-xs-1(type='button' class='btn btn-success' id='send' style='height:100%;font-size:20px') Send
 	
-	link(rel='stylesheet' href='css/jquery-ui.min.css')
-	script(src='javascript/jquery-ui.min.js')
+	link(rel='stylesheet' href='/css/jquery-ui.min.css')
+	script(src='/javascript/jquery-ui.min.js')
 	script(src='/socket.io/socket.io.js')
 	script.
 		var socket = io();
@@ -83,7 +83,7 @@ block content
 		function sendInvite() {
 			var searchbar = $('[name=invitesearch]');
 			$.ajax({
-				url: '/inviteuser',
+				url: '/chat/inviteuser',
 				method: 'GET',
 				data: {
 					term: searchbar.val(),
@@ -124,7 +124,7 @@ block content
 			});
 			$('#message').val('');
 			$.ajax({
-				url: '/chatroom',
+				url: '/chat/chatroom',
 				method: 'POST',
 				data: {
 					id: '#{id}',
@@ -190,7 +190,7 @@ block content
 
 		$('#loadPrevLink').click(function() {
 			$.ajax({
-				url: '/getpage',
+				url: '/chat/getpage',
 				method: 'GET',
 				data: {
 					id: '#{id}',
@@ -231,7 +231,7 @@ block content
 		// note: if loadNext is visible, the current page must not be on the browser screen
 		$('#loadNextLink').click(function() {
 			$.ajax({
-				url: '/getpage',
+				url: '/chat/getpage',
 				method: 'GET',
 				data: {
 					id: '#{id}',
@@ -270,7 +270,7 @@ block content
 
 		$('#leaveroom').click(function() {
 			$.ajax({
-				url: '/leavechatroom',
+				url: '/dir/leavechatroom',
 				method: 'POST',
 				data: {
 					user: '#{user}',
@@ -280,7 +280,7 @@ block content
 					console.log('Error leaving chatroom');
 				},
 				success: function(data) {
-					window.location.href = '/contactdir';
+					window.location.href = '/dir/contactdir';
 				}			
 			});
 		});
