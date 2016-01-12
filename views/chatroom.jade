@@ -201,6 +201,10 @@ block content
 					console.log('Error accessing messages');
 				},
 				success: function(data) {
+					if (data.error) {
+						console.log(data.error);
+						return;
+					}
 					// if the most recent page was on browser screen, loading a past page
 					// means we must toggle on loadNext's display because there is now also
 					// a future page to load
@@ -238,6 +242,10 @@ block content
 					console.log('Error accessing messages');
 				},
 				success: function(data) {
+					if (data.error) {
+						console.log(data.error);
+						return;
+					}
 					// if page one was the first page, toggle on loadPrev's display because
 					// after loading the next page, we have past pages we can load
 					if (pageOne == 0) loadPrev.css('display', 'inline');
