@@ -71,7 +71,10 @@ block content
 								td No
 							td #{chatroom.members.length} / #{chatroom.capacity}
 							td
-								button.join(type='button' class='btn btn-success join' id='#{chatroom._id}' data-admin='#{chatroom.admin}') Join
+								if chatroom.members.length == chatroom.capacity
+									button.join(type='button' class='btn btn-success join' id='#{chatroom._id}' data-admin='#{chatroom.admin}' disabled) Join
+								else
+									button.join(type='button' class='btn btn-success join' id='#{chatroom._id}' data-admin='#{chatroom.admin}') Join
 
 		script(src='/socket.io/socket.io.js')
 		script.
@@ -118,21 +121,23 @@ block content
 						user: '#{user}',
 						id: chatroomId
 					},
-					dataType: 'text',
+					dataType: 'json',
 					error: function() {
 						console.log('Error joining chatroom');
 					},
 					success: function(data) {
-						if (data == responseForNeedPermission) {
+						if (!data.redirect) {
 							// change button's text and disable it to signify that a request to join 
-							// has been sent and is awaiting approval
-							$(this).text(data);
+							// has been processed
+							$(this).text(data.msg);
 							$(this).attr('disabled', 'disabled');
-							// tell admin that they have a new request notification
-							socket.emit('notification', chatroomAdmin);
+							// tell admin that they have a new request notification if a request was sent
+							if (data.msg == responseForNeedPermission) {
+								socket.emit('notification', chatroomAdmin);
+							}
 						} else {
 							// else if no approval is needed, simply redirect to the newly joined chatroom
-							window.location.href = '/chatroom?id=' + data;
+							window.location.href = '/chatroom?id=' + data.msg;
 						}
 					}
 				});

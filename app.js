@@ -219,10 +219,9 @@ app.route('/signup')
 
 
 // TODO: create groups of users/friends
-// TODO: make notification counter display number of notifications, and update in real-time: socket io in contactdir
-// TODO: invite other users from chatroom page - only if admin -> need a search bar and need to determine whether a search query is valid/has already been invited/is already in the room
-// TODO: new joiner of chat room can load previous messages
 // TODO: cleanup
+// TODO: make handling of bad requests more consistent and separate from errors
+// TODO: make errors more descriptive?
 
 
 app.route('/chatroom')
@@ -247,6 +246,7 @@ app.route('/chatroom')
 					name: chatroom.name,
 					id: chatroom._id,
 					user: req.session.user.username,
+					isAdmin: req.session.user.username == chatroom.admin,
 					members: chatroom.members,
 					curMessages: curmsg,
 					numMessages: curmsg.length,
@@ -300,6 +300,60 @@ app.get('/getpage', authenticate, function(req, res, next) {
 			next(err);
 		} else {
 			res.send(chatroom.messageLog[pageNum]);
+		}
+	});
+});
+// invite another user to a requested chatroom; only the admin of the chatroom has this privilege
+app.get('/inviteuser', authenticate, function(req, res, next) {
+	var chatroomId = req.query.chatroomId;
+	var searchTerm = req.query.term;
+	Chatroom.findById(chatroomId, function(err, chatroom) {
+		if (err || !chatroom || chatroom.admin != req.session.user.username) {
+			next(err);
+		} else if (chatroom.members.length == chatroom.capacity) {
+			res.send('This room is full, cannot invite any more users.');
+			return;
+		} else {
+			User.findOne({username: searchTerm}, function(err, user) {
+				if (err) next(err);
+				else if (!user) {
+					res.send('No user with that username was found.');
+					return;
+				} else {
+					var notifications = user.notifications;
+					var chatrooms = user.chatrooms;
+					var i;
+					for (i = 0; i < chatrooms.length; i++) {
+						var room = chatrooms[i];
+						if (String(room.id) == String(chatroomId)) {
+							if (room.approved) {
+								res.send('That user is already in this room');
+								return;
+							} else {
+								res.send('That user has already requested to join this room.');
+								return;
+							}
+						}
+					}
+					for (var i = 0; i < notifications.length; i++) {
+						var notification = notifications[i];
+						if (String(notification.chatroomId) == String(chatroomId)) {
+							res.send('That user has already been invited to join this room.');
+							return;
+						}
+					}
+					notifications.push({
+						type: 'invite',
+						chatroomId: chatroomId,
+						chatroomName: chatroom.name,
+						sender: req.session.user.username
+					});
+					user.save(function(err) {
+						if (err) next(err);
+					});
+					res.send('Invite sent!');
+				}
+			});
 		}
 	});
 });
@@ -436,57 +490,87 @@ app.post('/joinchatroom', authenticate, function(req, res, next) {
 			|| chatroom.members.indexOf(req.session.user.username) != -1) {
 			// session user and request's user don't match or user is already in the
 			// chatroom to join
-			res.redirect('/contactdir');
+			res.send({
+				msg: 'Unauthorized user',
+				redirect: false
+			});
 			return;
-		} else if (chatroom.needPermission) { // need admin's permission to join
-			User.findOne({username: chatroom.admin}, function(err, admin) {
-				if (err) {
-					next(err);
-				} else {
-					// send request to admin
-					admin.notifications.push({
-						type: 'request',
-						chatroomId: chatroom._id,
-						chatroomName: chatroom.name,
-						sender: req.session.user.username
-					});
-					admin.save(function(err) {
-						if (err) {
-							next(err);
-						}
-					});
-					// add chatroom to user's chatrooms list as not approved yet
-					req.session.user.chatrooms.push({
-						id: chatroom._id,
-						approved: false
-					});
-					req.session.user.save(function(err) {
-						if (err) {
-							next(err);
-						}
-					});
-					res.send('Request sent');
-				}
-			});
 		} else {
-			chatroom.members.push(req.session.user.username); // add user as member
-			// add chatroom to user's chatrooms list as approved
-			req.session.user.chatrooms.push({
-				id: chatroom._id,
-				approved: true
-			});
-			req.session.user.save(function(err) {
-				if (err) {
-					next(err);
+			var notifications = req.session.user.notifications;
+			var existingNotification;
+			for (var i = 0; i < notifications.length; i++) {
+				var notification = notifications[i];
+				if (String(notification.chatroomId) == String(chatroom._id)) {
+					existingNotification = notification;
+					break;
 				}
-			});
-			chatroom.save(function(err) {
-				if (err) {
-					next(err);
-				}
-				res.send(String(chatroom._id));
-			});
-		}
+			}
+			if (existingNotification) {
+				res.send({
+					msg: 'Already invited',
+					redirect: false
+				});
+				return;
+			} else if (chatroom.needPermission) { // need admin's permission to join
+				User.findOne({username: chatroom.admin}, function(err, admin) {
+					if (err) next(err);
+					else {
+						// send request to admin
+						admin.notifications.push({
+							type: 'request',
+							chatroomId: chatroom._id,
+							chatroomName: chatroom.name,
+							sender: req.session.user.username
+						});
+						admin.save(function(err) {
+							if (err) {
+								next(err);
+							}
+						});
+						// add chatroom to user's chatrooms list as not approved yet
+						req.session.user.chatrooms.push({
+							id: chatroom._id,
+							approved: false
+						});
+						req.session.user.save(function(err) {
+							if (err) {
+								next(err);
+							}
+						});
+						res.send({
+							msg: 'Request sent',
+							redirect: false
+						});
+					}
+				});
+			} else if (chatroom.members.length == chatroom.capacity) {
+				res.send({
+					msg: 'Chatroom has been filled',
+					redirect: false
+				});
+			} else {
+				chatroom.members.push(req.session.user.username); // add user as member
+				// add chatroom to user's chatrooms list as approved
+				req.session.user.chatrooms.push({
+					id: chatroom._id,
+					approved: true
+				});
+				req.session.user.save(function(err) {
+					if (err) {
+						next(err);
+					}
+				});
+				chatroom.save(function(err) {
+					if (err) {
+						next(err);
+					}
+					res.send({
+						msg: String(chatroom._id),
+						redirect: true
+					});
+				});
+			}
+		} 
 	});
 });
 // creating a new chatroom
@@ -582,11 +666,20 @@ app.get('/notifications', authenticate, function(req, res, next) {
 	});
 });
 // have user accept the chatroom invite designated by the given notification
-function acceptInvite(user, notification, next) {
+function acceptInvite(user, notification, next, callback) {
 	Chatroom.findById(notification.chatroomId, function(err, chatroom) {
 		if (err) next(err);
-		else if (!chatroom) return; // chatroom has been deleted
-		else {
+		else if (!chatroom) { // chatroom has been deleted
+			callback({
+				success: false,
+				msg: 'That room has been deleted.'
+			});
+		} else if (chatroom.members.length == chatroom.capacity) { // chatroom is full
+			callback({
+				success: false,
+				msg: 'Chatroom is at full capacity right now. Try again later.'
+			});
+		} else {
 			chatroom.members.push(user.username);
 			chatroom.save(function(err) {
 				if (err) next(err);
@@ -600,6 +693,10 @@ function acceptInvite(user, notification, next) {
 			user.save(function(err) {
 				if (err) next(err);
 			});
+			callback({
+				success: true,
+				msg: ''
+			});
 		}
 	});
 }
@@ -608,28 +705,45 @@ app.post('/invite', authenticate, function(req, res, next) {
 	var notification = req.session.user.notifications.id(req.body.notificationId);
 	if (!notification || notification.type != 'invite') {
 		// notification is not an invite or does not exist for the session's user
-		res.send('Error: invalid notification');
-	}
-	else {
+		res.send({
+			success: false,
+			msg: 'Error: invalid notification'
+		});
+	} else {
+		var ret;
 		if (req.body.action == 'accept') {
-			acceptInvite(req.session.user, notification, next); // acceptInvite removes the notification as well
+			acceptInvite(req.session.user, notification, next, function(json) {
+				res.send(json);
+			}); // acceptInvite removes the notification as well
 		} else {
 			// note that if we reject an invite, we make no changes to the user's chatrooms
 			notification.remove();
 			req.session.user.save(function(err) {
 				if (err) next(err);
+			});
+			res.send({
+				success: true,
+				msg: ''
 			});			
-		} 
-		res.send('Success');
+		}
 	}	
 });
 // admin of a chatroom accepts user's request to join the chatroom
-function acceptRequest(user, notification, next) {
+function acceptRequest(user, notification, next, callback) {
 	// add the sender to the chatroom's list of members
 	Chatroom.findById(notification.chatroomId, function(err, chatroom) {
 		if (err) next(err);
-		else if (!chatroom) return;
-		else {
+		else if (!chatroom) {
+			callback({
+				success: false,
+				msg: 'That chatroom has been deleted.'
+			});
+		} else if (chatroom.members.length == chatroom.capacity) {
+			callback({
+				success: false,
+				msg: 'Chatroom is at full capacity right now. Try again later.'
+			});
+		} else {
 			chatroom.members.push(user.username);
 			chatroom.save(function(err) {
 				if (err) next(err);
@@ -644,11 +758,15 @@ function acceptRequest(user, notification, next) {
 			user.save(function(err) {
 				if (err) next(err);
 			});
+			callback({
+				success: true,
+				msg: ''
+			});
 		}
 	});
 }
 // admin rejects user's request to join chatroom
-function rejectRequest(user, notification) {
+function rejectRequest(user, notification, next, callback) {
 	// find the chatroom to which the sender of the notification has been denied access and remove it
 	// from the sender's chatrooms list
 	for (var i = 0; i < user.chatrooms.length; i++) {
@@ -660,24 +778,40 @@ function rejectRequest(user, notification) {
 	user.save(function(err) {
 		if (err) next(err);
 	});
+	callback({
+		success: true,
+		msg: ''
+	});
 }
 // process acceptions/rejections of requests to join chatrooms
 app.post('/request', authenticate, function(req, res, next) {
 	var notification = req.session.user.notifications.id(req.body.notificationId);
-	if (!notification || notification.type != 'request') res.send('Error: invalid notification');
-	else {
+	if (!notification || notification.type != 'request') {
+		res.send({
+			success: false,
+			msg: 'Error: invalid notification'
+		});
+	} else {
 		User.findOne({username: notification.sender}, function(err, user) {
 			if (err || !user) next(err);
 			else {
-				if (req.body.action == 'accept') acceptRequest(user, notification, next);
-				else rejectRequest(user, notification);
+				function callback(json) {
+					if (json.success) {
+						// only remove the notification if there was no issue processing it
+						notification.remove();
+						req.session.user.save(function(err) {
+							if (err) next(err);
+						});
+					}
+					res.send(json);	
+				}
+				if (req.body.action == 'accept') {
+					acceptRequest(user, notification, next, callback);
+				} else {
+					rejectRequest(user, notification, next, callback);
+				}
 			}
 		});
-		notification.remove();
-		req.session.user.save(function(err) {
-			if (err) next(err);
-		});
-		res.send('Success');
 	}
 });
 
@@ -710,4 +844,4 @@ app.use(function(err, req, res, next) {
 
 server.listen(3000, function() {
 	console.log('Listening on port ' + server.address().port);
-})
+});

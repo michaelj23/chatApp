@@ -13,6 +13,8 @@ block content
 					button(type='submit' class='btn btn-danger' style='margin-top:20px;margin-bottom:10px;margin-left:5px;float:right') Log out
 				a(role='button' class='btn btn-danger' style='margin-top:20px;margin-bottom:10px;margin-left:5px;float:right' href='/contactdir')  Go back
 		.row
+			.alert(class='alert-danger' role='alert' style='display:none' id='error') Error
+		.row
 			div(style='height:30em;background-color:gainsboro;overflow:auto')
 				table(class='table table-hover table-bordered' style='background-color:white')
 					tr
@@ -30,6 +32,7 @@ block content
 								button.reject(type='button' class='btn btn-danger') Reject
 
 	script.
+		var error = $('#error');
 		function processNotification(button, action) {
 			var row = button.closest('tr');
 			var path = '/' + row.attr('class');
@@ -40,13 +43,18 @@ block content
 					notificationId: row.attr('id'),
 					action: action
 				},
-				dataType: 'text',
+				dataType: 'json',
 				error: function() {
 					console.log('Error processing notification');
 				},
 				success: function(data) {
-					if (data == 'Success') row.remove();
-					else console.log(data);
+					if (data.success) {
+						row.remove();
+						error.css('display', 'none');
+					} else {
+						error.text(data.msg);
+						error.css('display', 'block');
+					}
 				}
 			});		
 		}

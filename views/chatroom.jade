@@ -8,20 +8,25 @@ block content
 	.container(style='height:100%')
 		.row
 			.col-xs-9(style='padding:0px')
-				h2(style='display:inline-block') #{name}
-				.dropdown(style='display:inline-block;margin-left:10px;bottom:+5px')
-					button(class='btn btn-primary dropdown-toggle' type='button' id='viewmembers' data-toggle='dropdown' aria-haspopup='true' aria-expanded='false') View Members 
-						span.caret
-					ul.dropdown-menu(aria-labelledby='viewmembers')
-						each member in members
-							li(style='padding:5px') #{member}
+				h2(style='white-space:nowrap;overflow:hidden;text-overflow:ellipsis') #{name}
 			.col-xs-3(style='padding:0px')
 				button#leaveroom(type='button' class='btn btn-danger' style='margin-top:20px;margin-bottom:10px;margin-left:5px;float:right') Leave room
 				form(action='/logout' method='post')
 					button(type='submit' class='btn btn-danger' style='margin-top:20px;margin-bottom:10px;margin-left:5px;float:right') Log out
 				a(role='button' class='btn btn-danger' style='margin-top:20px;margin-bottom:10px;margin-left:5px;float:right' href='/contactdir')  Go back
-
-		.row(class='panel' style='height:75%;border:2px solid black;overflow:auto')
+		.row
+			.col-xs-2(style='padding:0px')
+				.dropdown
+					button(class='btn btn-primary dropdown-toggle' type='button' id='viewmembers' data-toggle='dropdown' aria-haspopup='true' aria-expanded='false' style='width:100%') View Members 
+						span.caret
+					ul.dropdown-menu(aria-labelledby='viewmembers' style='width:100%')
+						each member in members
+							li(style='padding:5px') #{member}
+			if isAdmin
+				.col-xs-9(style='padding:0px')
+					input.form-control(type='text' name='invitesearch' placeholder='Invite another user to this room')
+				button.col-xs-1(type='button' class='btn btn-primary' style='height:100%' id='invite') Invite
+		.row(class='panel' style='height:70%;border:2px solid black;overflow:auto;margin-top:5px')
 			ul.panel-body#messages(class='list-unstyled' style='font-size:20px')
 				- var loadPrevDisplay = 'none';
 				- var loadNextDisplay = 'none';
@@ -55,6 +60,9 @@ block content
 			.col-xs-11(type='text' class='panel' style='height:100%;border:2px solid black;padding:0px')
 				input.form-control(type='text' id='message' style='height:100%;font-size:20px' placeholder='Type a chat message here')
 			button.col-xs-1(type='button' class='btn btn-success' id='send' style='height:100%;font-size:20px') Send
+	
+	link(rel='stylesheet' href='css/jquery-ui.min.css')
+	script(src='javascript/jquery-ui.min.js')
 	script(src='/socket.io/socket.io.js')
 	script.
 		var socket = io();
@@ -67,6 +75,37 @@ block content
 			chatroomId:'#{id}',
 			username: '#{user}'
 		});
+
+		var options = {
+			source: '/autocomplete'
+		};
+		$('[name=invitesearch]').autocomplete(options);
+		function sendInvite() {
+			var searchbar = $('[name=invitesearch]');
+			$.ajax({
+				url: '/inviteuser',
+				method: 'GET',
+				data: {
+					term: searchbar.val(),
+					chatroomId: '#{id}'
+				},
+				dataType: 'text',
+				error: function() {
+					console.log('Error sending invite');
+				},
+				success: function(data) {
+					searchbar.attr('placeholder', data);
+					searchbar.val('');
+				}
+			});		
+		}
+		$('#invite').click(function() {
+			sendInvite();
+		});
+		$('[name=invitesearch]').keypress(function() {
+			if (event.which == 13) sendInvite();
+		});
+
 
 		var curPage = #{curPage}; // index of most recent page
 		var pageOne = #{curPage}; // index of browser's first page
